@@ -18,7 +18,7 @@ from safetensors.torch import save_file, load_file
 from torch.utils.data import DataLoader
 import torch
 import torch.backends.cuda
-from huggingface_hub import HfApi, Repository, interpreter_login
+from huggingface_hub import HfApi, Repository, interpreter_login, create_repo
 from huggingface_hub.utils import HfFolder
 
 from toolkit.basic import value_map
@@ -73,7 +73,60 @@ def flush():
     gc.collect()
 
 
-class BaseSDTrainProcess(BaseTrainProcess):
+class HuggingFaceUploadMixin:
+    def _upload_to_huggingface(
+            self,
+            model_path: str,
+            repo_id: str,
+            token: str,
+            private: bool = True,
+            commit_message: str = "Model update"
+    ):
+        """
+        Upload model to Hugging Face
+
+        Args:
+            model_path: Path to the model to upload
+            repo_id: Hugging Face repository ID (username/repo_name)
+            token: Hugging Face API token
+            private: Whether to make the repository private
+            commit_message: Commit message
+        """
+        api = HfApi()
+
+        try:
+            # リポジトリが存在しなければ作成
+            create_repo(
+                repo_id,
+                private=private,
+                token=token,
+                repo_type="model",
+                exist_ok=True
+            )
+
+            if os.path.isdir(model_path):
+                api.upload_folder(
+                    folder_path=model_path,
+                    repo_id=repo_id,
+                    token=token,
+                    commit_message=commit_message
+                )
+            else:
+                api.upload_file(
+                    path_or_fileobj=model_path,
+                    path_in_repo=os.path.basename(model_path),
+                    repo_id=repo_id,
+                    token=token,
+                    commit_message=commit_message
+                )
+
+            return True
+        except Exception as e:
+            print(f"Error occurred while uploading to Hugging Face: {str(e)}")
+            return False
+
+
+class BaseSDTrainProcess(BaseTrainProcess, HuggingFaceUploadMixin):
 
     def __init__(self, process_id: int, job, config: OrderedDict, custom_pipeline=None):
         super().__init__(process_id, job, config)
@@ -629,6 +682,59 @@ class BaseSDTrainProcess(BaseTrainProcess):
         if self.ema is not None:
             self.ema.train()
         flush()
+
+        # --- モデルの状態を保存する既存処理の終了部分 ---
+        # 例としてファイルパスを file_path に保持している前提です。
+        if self.decorator is not None:
+            dec_filename = f'{self.job.name}{step_num}.safetensors'
+            dec_file_path = os.path.join(self.save_root, dec_filename)
+            decorator_state_dict = self.decorator.state_dict()
+            for key, value in decorator_state_dict.items():
+                if isinstance(value, torch.Tensor):
+                    decorator_state_dict[key] = value.clone().to('cpu', dtype=get_torch_dtype(self.save_config.dtype))
+            save_file(
+                decorator_state_dict,
+                dec_file_path,
+                metadata=save_meta,
+            )
+
+        # ※ここまでがモデル保存の既存処理です
+        ###################################################################
+        # HuggingFace Hub へのアップロード処理を追加
+        ###################################################################
+        if self.save_config.push_to_hub:
+            hf_token = os.environ.get("HF_TOKEN")
+            if not hf_token:
+                print("HF_TOKEN が設定されていないため、アップロードをスキップします。")
+            else:
+                repo_id = self.save_config.hf_repo_id
+                if self.save_config.get("use_suffix", False) and step is not None:
+                    repo_id = f"{repo_id}_{step}"
+                success = self._upload_to_huggingface(
+                    model_path=file_path,
+                    repo_id=repo_id,
+                    token=hf_token,
+                    private=self.save_config.hf_private,
+                    commit_message=f"Checkpoint saved at step {step}"
+                )
+                if success:
+                    print(f"Step {step}: Checkpoint successfully uploaded to HF Hub repository '{repo_id}'.")
+                else:
+                    print(f"Step {step}: Checkpoint upload failed.")
+
+        # # 後処理など
+        # self.logger.finish()
+        # self.accelerator.end_training()
+
+        # del (
+        #     self.sd,
+        #     unet,
+        #     noise_scheduler,
+        #     optimizer,
+        #     self.network,
+        #     tokenizer,
+        #     text_encoder,
+        # )
 
     # Called before the model is loaded
     def hook_before_model_load(self):

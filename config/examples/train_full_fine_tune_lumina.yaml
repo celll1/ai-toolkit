@@ -16,9 +16,10 @@ config:
       # trigger_word: "p3r5on"
       save:
         dtype: bf16 # precision to save
-        save_every: 250 # save every this many steps
+        save_every: 500 # save every this many steps
         max_step_saves_to_keep: 2 # how many intermittent saves to keep
         save_format: 'diffusers' # 'diffusers'
+        output_path: "./checkpoints"  # モデルチェックポイントの保存先
       datasets:
         # datasets are a folder of images. captions need to be txt files with the same name as the image
         # for instance image2.jpg and image2.txt. Only jpg, jpeg, and png are supported currently
@@ -97,3 +98,8 @@ config:
 meta:
   name: "[name]"
   version: '1.0'
+
+hub_upload:
+  private: true                 # trueの場合、アップロード先をプライベートリポジトリにする
+  use_suffix: true              # trueの場合、各保存チェックポイントでリポジトリ名にサフィックス（例：ステップ番号）を付与する
+  base_repo: "lumina_finetuned"  # ベースとなるリポジトリ名
