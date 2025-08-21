@@ -12,6 +12,20 @@ const docs: { [key: string]: ConfigDoc } = {
       </>
     ),
   },
+  'config.process[0].log_dir': {
+    title: 'TensorBoard Log Directory',
+    description: (
+      <>
+        Directory where TensorBoard logs will be saved for training visualization.
+        <br />
+        Leave empty to disable TensorBoard logging.
+        <br />
+        Example: output/.tensorboard
+        <br />
+        View logs by running: <code>tensorboard --logdir=output/.tensorboard</code>
+      </>
+    ),
+  },
   gpuids: {
     title: 'GPU ID',
     description: (

@@ -31,6 +31,7 @@ export const defaultJobConfig: JobConfig = {
       {
         type: 'ui_trainer',
         training_folder: 'output',
+        log_dir: null,
         sqlite_db_path: './aitk_db.db',
         device: 'cuda',
         trigger_word: null,

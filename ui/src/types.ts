@@ -176,6 +176,7 @@ export interface ProcessConfig {
   type: 'ui_trainer';
   sqlite_db_path?: string;
   training_folder: string;
+  log_dir?: string;
   performance_log_every: number;
   trigger_word: string | null;
   device: string;

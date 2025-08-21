@@ -124,6 +124,18 @@ export default function SimpleJob({
               options={gpuList.map((gpu: any) => ({ value: `${gpu.index}`, label: `GPU #${gpu.index}` }))}
             />
             <TextInput
+              label="TensorBoard Log Directory"
+              value={jobConfig.config.process[0].log_dir || ''}
+              docKey="config.process[0].log_dir"
+              onChange={(value: string | null) => {
+                if (value?.trim() === '') {
+                  value = null;
+                }
+                setJobConfig(value, 'config.process[0].log_dir');
+              }}
+              placeholder="e.g., output/.tensorboard (optional)"
+            />
+            <TextInput
               label="Trigger Word"
               value={jobConfig.config.process[0].trigger_word || ''}
               docKey="config.process[0].trigger_word"

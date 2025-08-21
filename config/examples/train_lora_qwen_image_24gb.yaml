@@ -4,6 +4,8 @@ config:
   process:
     - type: 'sd_trainer'
       training_folder: "output/qwen_image_lora"
+      # for tensorboard logging (optional)
+      log_dir: "output/.tensorboard"
       device: cuda:0
       # huggingface model name or path
       model:
