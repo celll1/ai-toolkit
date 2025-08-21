@@ -2,7 +2,7 @@
 import { createGlobalState } from 'react-global-hooks';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { FaUpload } from 'react-icons/fa';
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { apiClient } from '@/utils/api';
 
@@ -21,6 +21,7 @@ export default function AddImagesModal() {
   const [addImagesModalInfo, setAddImagesModalInfo] = addImagesModalState.use();
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const directoryInputRef = useRef<HTMLInputElement>(null);
   const open = addImagesModalInfo !== null;
 
   const onCancel = () => {
@@ -46,6 +47,8 @@ export default function AddImagesModal() {
       const formData = new FormData();
       acceptedFiles.forEach(file => {
         formData.append('files', file);
+        // Include webkitRelativePath for nested directory support
+        formData.append('paths', (file as any).webkitRelativePath || file.name);
       });
       formData.append('datasetName', addImagesModalInfo?.datasetName || '');
 
@@ -64,12 +67,29 @@ export default function AddImagesModal() {
         onDone();
       } catch (error) {
         console.error('Upload failed:', error);
+        alert('Upload failed. Please try again or check the file sizes.');
       } finally {
         setIsUploading(false);
         setUploadProgress(0);
       }
     },
     [addImagesModalInfo],
+  );
+
+  const handleDirectoryUpload = useCallback(() => {
+    if (directoryInputRef.current) {
+      directoryInputRef.current.click();
+    }
+  }, []);
+
+  const handleDirectoryChange = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files || []);
+      if (files.length > 0) {
+        await onDrop(files);
+      }
+    },
+    [onDrop],
   );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -112,6 +132,28 @@ export default function AddImagesModal() {
                       {isDragActive ? 'Drop the files here...' : 'Drag & drop files here, or click to select files'}
                     </p>
                   </div>
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleDirectoryUpload}
+                      disabled={isUploading}
+                      className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-800 disabled:cursor-not-allowed rounded-lg text-sm text-gray-200 transition-colors"
+                    >
+                      Select Folder
+                    </button>
+                  </div>
+                  
+                  {/* Hidden directory input */}
+                  <input
+                    ref={directoryInputRef}
+                    type="file"
+                    {...({ webkitdirectory: '' } as any)}
+                    multiple
+                    style={{ display: 'none' }}
+                    onChange={handleDirectoryChange}
+                    accept="image/*,video/*,.txt"
+                  />
+                  
                   {isUploading && (
                     <div className="mt-4">
                       <div className="w-full bg-gray-700 rounded-full h-2.5">
