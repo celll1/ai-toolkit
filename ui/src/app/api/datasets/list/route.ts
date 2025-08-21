@@ -16,6 +16,10 @@ function countImagesInDirectory(dirPath: string): number {
         if (IMAGE_EXTENSIONS.includes(ext)) {
           count++;
         }
+      } else if (file.isDirectory()) {
+        // Recursively count images in subdirectories
+        const subDirPath = path.join(dirPath, file.name);
+        count += countImagesInDirectory(subDirPath);
       }
     }
     
