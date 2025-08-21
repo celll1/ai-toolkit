@@ -568,6 +568,12 @@ class AiToolkitDataset(LatentCachingMixin, ControlCachingMixin, CLIPCachingMixin
                 # handle cropping to a specific point of interest
                 # setup buckets every epoch
                 self.setup_buckets(quiet=True)
+            
+            # Update captions for new epoch if shuffle_per_epoch is enabled
+            if self.dataset_config.shuffle_tokens and self.dataset_config.shuffle_per_epoch:
+                for file_item in self.file_list:
+                    file_item.update_caption_for_epoch(self.epoch_num)
+        
         self.epoch_num += 1
 
     def __len__(self):

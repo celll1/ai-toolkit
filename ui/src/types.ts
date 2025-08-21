@@ -78,9 +78,13 @@ export interface DatasetConfig {
   caption_ext: string;
   caption_dropout_rate: number;
   shuffle_tokens?: boolean;
+  shuffle_per_epoch?: boolean;
+  shuffle_mode?: 'all' | 'keep_first_n';
+  shuffle_keep_first_n?: number;
   is_reg: boolean;
   network_weight: number;
   cache_latents_to_disk?: boolean;
+  cache_text_embeddings?: boolean;
   resolution: number[];
   controls: string[];
   control_path: string | null;

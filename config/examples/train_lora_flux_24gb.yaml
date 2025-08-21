@@ -35,6 +35,10 @@ config:
           caption_ext: "txt"
           caption_dropout_rate: 0.05  # will drop out the caption 5% of time
           shuffle_tokens: false  # shuffle caption order, split by commas
+          # New shuffle options (only work when shuffle_tokens is true and cache_text_embeddings is false):
+          # shuffle_per_epoch: false  # if true, shuffles tags consistently per epoch (same shuffle for same image in an epoch)
+          # shuffle_mode: "all"  # "all" or "keep_first_n" - how to shuffle tags
+          # shuffle_keep_first_n: 0  # if shuffle_mode is "keep_first_n", keep first n tags unshuffled
           cache_latents_to_disk: true  # leave this true unless you know what you're doing
           resolution: [ 512, 768, 1024 ]  # flux enjoys multiple resolutions
       train:

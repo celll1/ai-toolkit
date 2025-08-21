@@ -295,6 +295,7 @@ class CaptionProcessingDTOMixin:
             super().__init__(*args, **kwargs)
             self.raw_caption: str = None
             self.raw_caption_short: str = None
+            self.epoch_num = kwargs.get('epoch_num', 0)
             self.caption: str = None
             self.caption_short: str = None
 
@@ -352,16 +353,17 @@ class CaptionProcessingDTOMixin:
             self.raw_caption = prompt
             self.raw_caption_short = short_caption
 
-        self.caption = self.get_caption()
+        self.caption = self.get_caption(epoch_num=self.epoch_num)
         if self.raw_caption_short is not None:
-            self.caption_short = self.get_caption(short_caption=True)
+            self.caption_short = self.get_caption(short_caption=True, epoch_num=self.epoch_num)
 
     def get_caption(
             self: 'FileItemDTO',
             trigger=None,
             to_replace_list=None,
             add_if_not_present=False,
-            short_caption=False
+            short_caption=False,
+            epoch_num=0
     ):
         if short_caption:
             raw_caption = self.raw_caption_short
@@ -403,7 +405,26 @@ class CaptionProcessingDTOMixin:
             token_list = new_token_list
 
         if self.dataset_config.shuffle_tokens:
-            random.shuffle(token_list)
+            if self.dataset_config.shuffle_per_epoch:
+                # Seed based on image path and epoch for consistent shuffling per epoch
+                import hashlib
+                seed_str = f"{self.path}_{epoch_num}"
+                seed = int(hashlib.md5(seed_str.encode()).hexdigest(), 16) % (2**32)
+                rng = random.Random(seed)
+                
+                if self.dataset_config.shuffle_mode == 'keep_first_n' and self.dataset_config.shuffle_keep_first_n > 0:
+                    # Keep first n tokens in place
+                    keep_n = min(self.dataset_config.shuffle_keep_first_n, len(token_list))
+                    first_tokens = token_list[:keep_n]
+                    rest_tokens = token_list[keep_n:]
+                    rng.shuffle(rest_tokens)
+                    token_list = first_tokens + rest_tokens
+                else:
+                    # Shuffle all tokens
+                    rng.shuffle(token_list)
+            else:
+                # Original behavior: completely random every time
+                random.shuffle(token_list)
 
         # join back together
         caption = ', '.join(token_list)
@@ -424,16 +445,45 @@ class CaptionProcessingDTOMixin:
                 #     caption = caption + ', ' + trigger
 
         if self.dataset_config.shuffle_tokens:
-            # shuffle again
+            # shuffle again after adding random triggers
             token_list = caption.split(',')
             # trim whitespace
             token_list = [x.strip() for x in token_list]
             # remove empty strings
             token_list = [x for x in token_list if x]
-            random.shuffle(token_list)
+            
+            if self.dataset_config.shuffle_per_epoch:
+                # Use same seed-based approach for consistency
+                import hashlib
+                seed_str = f"{self.path}_{epoch_num}_post"
+                seed = int(hashlib.md5(seed_str.encode()).hexdigest(), 16) % (2**32)
+                rng = random.Random(seed)
+                
+                if self.dataset_config.shuffle_mode == 'keep_first_n' and self.dataset_config.shuffle_keep_first_n > 0:
+                    # Keep first n tokens in place
+                    keep_n = min(self.dataset_config.shuffle_keep_first_n, len(token_list))
+                    first_tokens = token_list[:keep_n]
+                    rest_tokens = token_list[keep_n:]
+                    rng.shuffle(rest_tokens)
+                    token_list = first_tokens + rest_tokens
+                else:
+                    # Shuffle all tokens
+                    rng.shuffle(token_list)
+            else:
+                # Original behavior: completely random every time
+                random.shuffle(token_list)
+            
             caption = ', '.join(token_list)
 
         return caption
+    
+    def update_caption_for_epoch(self: 'FileItemDTO', epoch_num: int):
+        """Update caption for a new epoch when shuffle_per_epoch is enabled"""
+        if self.dataset_config.shuffle_tokens and self.dataset_config.shuffle_per_epoch:
+            self.epoch_num = epoch_num
+            self.caption = self.get_caption(epoch_num=epoch_num)
+            if self.raw_caption_short is not None:
+                self.caption_short = self.get_caption(short_caption=True, epoch_num=epoch_num)
 
 
 class ImageProcessingDTOMixin:

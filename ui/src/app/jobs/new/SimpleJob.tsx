@@ -494,11 +494,19 @@ export default function SimpleJob({
                     }}
                   />
                   <Checkbox
-                    label="Cache Text Embeddings"
+                    label="Cache Text Embeddings (Global)"
                     checked={jobConfig.config.process[0].train.cache_text_embeddings || false}
                     docKey={'train.cache_text_embeddings'}
                     onChange={value => {
                       setJobConfig(value, 'config.process[0].train.cache_text_embeddings');
+                      // Sync to all datasets
+                      jobConfig.config.process[0].datasets.forEach((_, datasetIndex) => {
+                        setJobConfig(value, `config.process[0].datasets[${datasetIndex}].cache_text_embeddings`);
+                        // Disable shuffle_per_epoch if caching text embeddings
+                        if (value) {
+                          setJobConfig(false, `config.process[0].datasets[${datasetIndex}].shuffle_per_epoch`);
+                        }
+                      });
                       if (value) {
                         setJobConfig(false, 'config.process[0].train.unload_text_encoder');
                       }
@@ -625,6 +633,25 @@ export default function SimpleJob({
                           }
                         />
                         <Checkbox
+                          label="Cache Text Embeddings (Dataset-specific)"
+                          checked={dataset.cache_text_embeddings || false}
+                          onChange={value => {
+                            setJobConfig(value, `config.process[0].datasets[${i}].cache_text_embeddings`);
+                            // Sync back to train config if all datasets have same value
+                            const allDatasets = jobConfig.config.process[0].datasets;
+                            const updatedDatasets = [...allDatasets];
+                            updatedDatasets[i] = { ...updatedDatasets[i], cache_text_embeddings: value };
+                            const allSameValue = updatedDatasets.every(d => d.cache_text_embeddings === value);
+                            if (allSameValue) {
+                              setJobConfig(value, 'config.process[0].train.cache_text_embeddings');
+                            }
+                            // Disable shuffle_per_epoch if caching text embeddings
+                            if (value && dataset.shuffle_per_epoch) {
+                              setJobConfig(false, `config.process[0].datasets[${i}].shuffle_per_epoch`);
+                            }
+                          }}
+                        />
+                        <Checkbox
                           label="Is Regularization"
                           checked={dataset.is_reg || false}
                           onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].is_reg`)}
@@ -636,6 +663,53 @@ export default function SimpleJob({
                             onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].do_i2v`)}
                             docKey="datasets.do_i2v"
                           />
+                        )}
+                      </FormGroup>
+                      
+                      <FormGroup label="Tag Shuffling" className="pt-4">
+                        <Checkbox
+                          label="Shuffle Tags"
+                          checked={dataset.shuffle_tokens || false}
+                          docKey="datasets.shuffle_tokens"
+                          onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].shuffle_tokens`)}
+                        />
+                        {dataset.shuffle_tokens && (
+                          <>
+                            <Checkbox
+                              label="Shuffle Per Epoch"
+                              checked={dataset.shuffle_per_epoch || false}
+                              disabled={dataset.cache_text_embeddings}
+                              docKey="datasets.shuffle_per_epoch"
+                              onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].shuffle_per_epoch`)}
+                            />
+                            {dataset.cache_text_embeddings && (
+                              <p className="text-xs text-yellow-400 mt-1">
+                                Shuffle per epoch requires text embeddings caching to be disabled
+                              </p>
+                            )}
+                            <SelectInput
+                              label="Shuffle Mode"
+                              className="pt-2"
+                              docKey="datasets.shuffle_mode"
+                              value={dataset.shuffle_mode || 'all'}
+                              onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].shuffle_mode`)}
+                              options={[
+                                { value: 'all', label: 'Shuffle All Tags' },
+                                { value: 'keep_first_n', label: 'Keep First N Tags' },
+                              ]}
+                            />
+                            {dataset.shuffle_mode === 'keep_first_n' && (
+                              <NumberInput
+                                label="Keep First N Tags"
+                                className="pt-2"
+                                docKey="datasets.shuffle_keep_first_n"
+                                value={dataset.shuffle_keep_first_n || 0}
+                                onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].shuffle_keep_first_n`)}
+                                placeholder="eg. 3"
+                                min={0}
+                              />
+                            )}
+                          </>
                         )}
                       </FormGroup>
                     </div>

@@ -107,7 +107,56 @@ const docs: { [key: string]: ConfigDoc } = {
         <br />
         Caching text embeddings will process and cache all the text embeddings from the text encoder to the disk. The
         text encoder will be unloaded from the GPU. This does not work with things that dynamically change the prompt
-        such as trigger words, caption dropout, etc.
+        such as trigger words, caption dropout, or tag shuffling per epoch.
+        <br /><br />
+        <strong>Note:</strong> This setting applies to all datasets. Use dataset-specific settings for more granular control.
+      </>
+    ),
+  },
+  'datasets.shuffle_tokens': {
+    title: 'Shuffle Tags',
+    description: (
+      <>
+        Shuffle the order of tags in captions (comma-separated tags).
+        This helps the model learn better tag relationships and generalize better.
+        <br />
+        Example: "1girl, blue hair, long hair" → "long hair, 1girl, blue hair"
+      </>
+    ),
+  },
+  'datasets.shuffle_per_epoch': {
+    title: 'Shuffle Per Epoch',
+    description: (
+      <>
+        When enabled, tags are shuffled consistently within each epoch - the same image will have the same tag order throughout an epoch, but different order in different epochs.
+        <br />
+        When disabled, tags are shuffled completely randomly every time the image is used.
+        <br />
+        <strong>Requirement:</strong> Text embedding caching must be disabled.
+      </>
+    ),
+  },
+  'datasets.shuffle_mode': {
+    title: 'Shuffle Mode',
+    description: (
+      <>
+        <strong>All:</strong> Shuffle all tags randomly.
+        <br />
+        <strong>Keep First N:</strong> Keep the first N tags in their original position and shuffle the rest.
+        <br />
+        Useful for keeping important tags like ratings, characters, or series names in consistent positions.
+      </>
+    ),
+  },
+  'datasets.shuffle_keep_first_n': {
+    title: 'Keep First N Tags',
+    description: (
+      <>
+        Number of tags at the beginning of the caption to keep in their original position.
+        <br />
+        Example with N=2: "sensitive, 1girl, blue hair, long hair" → "sensitive, 1girl, long hair, blue hair"
+        <br />
+        Commonly used to preserve rating tags and character information.
       </>
     ),
   },

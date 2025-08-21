@@ -805,6 +805,10 @@ class DatasetConfig:
         self.network_weight: float = float(kwargs.get('network_weight', 1.0))
         self.token_dropout_rate: float = float(kwargs.get('token_dropout_rate', 0.0))
         self.shuffle_tokens: bool = kwargs.get('shuffle_tokens', False)
+        self.shuffle_per_epoch: bool = kwargs.get('shuffle_per_epoch', False)  # shuffle tokens differently each epoch
+        self.shuffle_mode: str = kwargs.get('shuffle_mode', 'all')  # 'all', 'keep_first_n', 'partial' (future extension)
+        self.shuffle_keep_first_n: int = kwargs.get('shuffle_keep_first_n', 0)  # keep first n tokens unshuffled
+        self.shuffle_groups: dict = kwargs.get('shuffle_groups', {})  # for future partial shuffle feature
         self.caption_dropout_rate: float = float(kwargs.get('caption_dropout_rate', 0.0))
         self.keep_tokens: int = kwargs.get('keep_tokens', 0)  # #of first tokens to always keep unless caption dropped
         self.flip_x: bool = kwargs.get('flip_x', False)

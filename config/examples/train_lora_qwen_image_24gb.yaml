@@ -1,0 +1,83 @@
+job: extension
+config:
+  name: "my_first_qwen_image_lora_v1"
+  process:
+    - type: 'sd_trainer'
+      training_folder: "output/qwen_image_lora"
+      device: cuda:0
+      # huggingface model name or path
+      model:
+        name_or_path: "Qwen/QwenImage"  # you can change this to any Qwen Image model
+        is_qwen_image: true
+        quantize: true  # run the model quantized? recommended for Qwen Image
+        low_vram: false  # uncomment this if the GPU is connected to displays or you get memory errors
+        
+      # uncomment this to train a specific LoRA weight. 
+      # training the entire model will train all LoRA weights but will be slow
+#      trigger_word: "p3r5on"
+      network:
+        type: "lora"
+        linear: 16
+        linear_alpha: 16
+      save:
+        dtype: float16 # precision to save
+        save_every: 250 # save every this many steps
+        max_step_saves_to_keep: 4 # how many intermittent saves to keep
+      datasets:
+        # datasets are a folder of images. captions need to be txt files with the same name as the image
+        # for instance image2.jpg and image2.txt. Only jpg, jpeg, and png are supported currently
+        # images will automatically be resized and bucketed into the resolution specified
+        # on windows, escape back slashes with another backslash so
+        # "C:\\path\\to\\images\\folder"
+        - folder_path: "/path/to/images/folder"
+          caption_ext: "txt"
+          caption_dropout_rate: 0.05  # will drop out the caption 5% of time
+          
+          # Tag shuffling options for better generalization with tag-based captions
+          shuffle_tokens: true  # shuffle caption order, split by commas (tags)
+          shuffle_per_epoch: true  # shuffles tags consistently per epoch (same shuffle for same image in an epoch)
+          shuffle_mode: "keep_first_n"  # "all" or "keep_first_n" - how to shuffle tags
+          shuffle_keep_first_n: 3  # keep first 3 tags (e.g., rating, character, series) unshuffled
+          # Note: shuffle options only work when cache_text_embeddings is false
+          
+          cache_latents_to_disk: true  # leave this true unless you know what you're doing
+          cache_text_embeddings: false  # must be false to use tag shuffling
+          resolution: [ 512, 768, 1024 ]  # multiple resolutions for better training
+      train:
+        batch_size: 1
+        steps: 2000  # total number of steps to train 500 - 4000 is a good range
+        gradient_accumulation_steps: 1
+        train_unet: true
+        train_text_encoder: false  # probably won't work with Qwen
+        gradient_checkpointing: true  # need this on unless you have a ton of vram
+        noise_scheduler: "flowmatch" # for training only
+        optimizer: "adamw8bit"
+        lr: 1e-4
+        # uncomment this to skip the pre training sample
+#        skip_first_sample: true
+        # uncomment to completely disable sampling
+#        disable_sampling: true
+        # uncomment to use new vae sampling. Faster but produces weird results
+#        use_new_vae_padding: false
+        # uncomment to disable xformers if you have problems with it
+#        disable_xformers: false
+      sample:
+        sampler: "flowmatch" # must match train.noise_scheduler
+        sample_every: 250 # sample every this many steps
+        width: 1024
+        height: 1024
+        prompts:
+          # you can add [trigger] to the prompts here and it will be replaced with the trigger word
+#          - "[trigger] holding a sign that says 'I LOVE AI Toolkit!'"
+          - "a woman holding a sign that says 'I LOVE AI Toolkit!'"
+          - "a photo of a man holding a cat"
+          - "a landscape photo of mountains"
+          - "sensitive, adrien agreste, chat noir, ladybug \\(character\\), marinette dupain-cheng, miraculous ladybug, 1boy, 1girl, bell, black bodysuit, blonde hair, blue hair, bodysuit, cat boy, colored sclera, face-to-face, green sclera, lips, long hair, magical girl, mask, nose, polka dot, shorts, superhero costume, twintails, highres, official art"
+        neg: ""  # not used on flow matching
+        seed: 42
+        walk_seed: true
+        guidance_scale: 3.5
+        sample_steps: 28
+  meta:
+    name: "[name]"
+    version: '1.0'
