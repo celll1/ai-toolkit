@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Modal } from '@/components/Modal';
 import Link from 'next/link';
 import { TextInput } from '@/components/formInputs';
-import useDatasetList from '@/hooks/useDatasetList';
+import useDatasetList, { Dataset } from '@/hooks/useDatasetList';
 import { Button } from '@headlessui/react';
 import { FaRegTrashAlt } from 'react-icons/fa';
 import { openConfirm } from '@/components/ConfirmModal';
@@ -21,8 +21,9 @@ export default function Datasets() {
 
   // Transform datasets array into rows with objects
   const tableRows = datasets.map(dataset => ({
-    name: dataset,
-    actions: dataset, // Pass full dataset name for actions
+    name: dataset.name,
+    imageCount: dataset.imageCount,
+    actions: dataset.name, // Pass full dataset name for actions
   }));
 
   const columns: TableColumn[] = [
@@ -36,13 +37,23 @@ export default function Datasets() {
       ),
     },
     {
+      title: 'Images',
+      key: 'imageCount',
+      className: 'w-20 text-center',
+      render: row => (
+        <span className="text-gray-300">
+          {row.imageCount.toLocaleString()}
+        </span>
+      ),
+    },
+    {
       title: 'Actions',
       key: 'actions',
       className: 'w-20 text-right',
       render: row => (
         <button
           className="text-gray-200 hover:bg-red-600 p-2 rounded-full transition-colors"
-          onClick={() => handleDeleteDataset(row.name)}
+          onClick={() => handleDeleteDataset(row.actions)}
         >
           <FaRegTrashAlt />
         </button>
