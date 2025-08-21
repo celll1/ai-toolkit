@@ -9,7 +9,7 @@ import { useNestedState } from '@/utils/hooks';
 import { SelectInput } from '@/components/formInputs';
 import useSettings from '@/hooks/useSettings';
 import useGPUInfo from '@/hooks/useGPUInfo';
-import useDatasetList from '@/hooks/useDatasetList';
+import useDatasetList, { Dataset } from '@/hooks/useDatasetList';
 import path from 'path';
 import { TopBar, MainContent } from '@/components/layout';
 import { Button } from '@headlessui/react';
@@ -39,7 +39,7 @@ export default function TrainingForm() {
     if (!isSettingsLoaded) return;
     if (datasetFetchStatus !== 'success') return;
 
-    const datasetOptions = datasets.map(name => ({ value: path.join(settings.DATASETS_FOLDER, name), label: name }));
+    const datasetOptions = datasets.map(dataset => ({ value: path.join(settings.DATASETS_FOLDER, dataset.name), label: dataset.name }));
     setDatasetOptions(datasetOptions);
     const defaultDatasetPath = defaultDatasetConfig.folder_path;
 
