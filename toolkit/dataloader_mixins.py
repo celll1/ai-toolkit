@@ -409,16 +409,30 @@ class CaptionProcessingDTOMixin:
         if self.dataset_config.shuffle_tokens:
             if self.dataset_config.shuffle_per_epoch:
                 # Seed based on image path and epoch for consistent shuffling per epoch
-                import hashlib
-                seed_str = f"{self.path}_{epoch_num}"
-                seed = int(hashlib.md5(seed_str.encode()).hexdigest(), 16) % (2**32)
+                # Cache seed calculation to avoid repeated MD5 hashing
+                seed_cache_key = f"{self.path}_{epoch_num}"
+                if not hasattr(self.dataset_config, '_seed_cache'):
+                    self.dataset_config._seed_cache = {}
+                
+                if seed_cache_key in self.dataset_config._seed_cache:
+                    seed = self.dataset_config._seed_cache[seed_cache_key]
+                else:
+                    import hashlib
+                    seed = int(hashlib.md5(seed_cache_key.encode()).hexdigest(), 16) % (2**32)
+                    self.dataset_config._seed_cache[seed_cache_key] = seed
+                    
                 rng = random.Random(seed)
                 
                 if self.dataset_config.shuffle_mode == 'tag_group' and self.dataset_config.shuffle_tag_groups:
                     # Tag group-based shuffle
                     if tag_group_manager is None:
-                        # Initialize TagGroupManager if not provided
+                        # Initialize TagGroupManager if not provided - cache it for future use
                         tag_group_manager = TagGroupManager(self.dataset_config.tag_group_dir)
+                        # Store in dataset config to avoid re-initialization
+                        self.dataset_config._tag_group_manager = tag_group_manager
+                    elif hasattr(self.dataset_config, '_tag_group_manager'):
+                        # Reuse cached TagGroupManager
+                        tag_group_manager = self.dataset_config._tag_group_manager
                     keep_n = self.dataset_config.shuffle_keep_first_n if self.dataset_config.shuffle_keep_first_n > 0 else 0
                     token_list = tag_group_manager.shuffle_by_groups(
                         token_list, 
@@ -443,7 +457,13 @@ class CaptionProcessingDTOMixin:
                 if self.dataset_config.shuffle_mode == 'tag_group' and self.dataset_config.shuffle_tag_groups:
                     # Tag group-based shuffle with random seed
                     if tag_group_manager is None:
-                        tag_group_manager = TagGroupManager(self.dataset_config.tag_group_dir)
+                        # Check for cached TagGroupManager first
+                        if hasattr(self.dataset_config, '_tag_group_manager'):
+                            tag_group_manager = self.dataset_config._tag_group_manager
+                        else:
+                            # Initialize and cache TagGroupManager
+                            tag_group_manager = TagGroupManager(self.dataset_config.tag_group_dir)
+                            self.dataset_config._tag_group_manager = tag_group_manager
                     keep_n = self.dataset_config.shuffle_keep_first_n if self.dataset_config.shuffle_keep_first_n > 0 else 0
                     token_list = tag_group_manager.shuffle_by_groups(
                         token_list,
@@ -498,7 +518,13 @@ class CaptionProcessingDTOMixin:
                 if self.dataset_config.shuffle_mode == 'tag_group' and self.dataset_config.shuffle_tag_groups:
                     # Tag group-based shuffle
                     if tag_group_manager is None:
-                        tag_group_manager = TagGroupManager(self.dataset_config.tag_group_dir)
+                        # Check for cached TagGroupManager first
+                        if hasattr(self.dataset_config, '_tag_group_manager'):
+                            tag_group_manager = self.dataset_config._tag_group_manager
+                        else:
+                            # Initialize and cache TagGroupManager
+                            tag_group_manager = TagGroupManager(self.dataset_config.tag_group_dir)
+                            self.dataset_config._tag_group_manager = tag_group_manager
                     keep_n = self.dataset_config.shuffle_keep_first_n if self.dataset_config.shuffle_keep_first_n > 0 else 0
                     token_list = tag_group_manager.shuffle_by_groups(
                         token_list,
@@ -523,7 +549,13 @@ class CaptionProcessingDTOMixin:
                 if self.dataset_config.shuffle_mode == 'tag_group' and self.dataset_config.shuffle_tag_groups:
                     # Tag group-based shuffle with random seed
                     if tag_group_manager is None:
-                        tag_group_manager = TagGroupManager(self.dataset_config.tag_group_dir)
+                        # Check for cached TagGroupManager first
+                        if hasattr(self.dataset_config, '_tag_group_manager'):
+                            tag_group_manager = self.dataset_config._tag_group_manager
+                        else:
+                            # Initialize and cache TagGroupManager
+                            tag_group_manager = TagGroupManager(self.dataset_config.tag_group_dir)
+                            self.dataset_config._tag_group_manager = tag_group_manager
                     keep_n = self.dataset_config.shuffle_keep_first_n if self.dataset_config.shuffle_keep_first_n > 0 else 0
                     token_list = tag_group_manager.shuffle_by_groups(
                         token_list,

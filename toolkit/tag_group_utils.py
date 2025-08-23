@@ -24,12 +24,17 @@ class TagGroupManager:
         self.tag_group_dir = tag_group_dir
         self.tag_groups: Dict[str, Set[str]] = {}
         self.tag_to_group: Dict[str, str] = {}
+        self._loaded = False
         self.load_tag_groups()
     
     def load_tag_groups(self):
         """Load all tag group JSON files from the specified directory"""
+        if self._loaded:
+            return  # Already loaded, skip
+        
         base_path = Path(self.tag_group_dir)
         if not base_path.exists():
+            self._loaded = True
             return
         
         for json_file in base_path.glob('*.json'):
@@ -44,6 +49,8 @@ class TagGroupManager:
                         self.tag_to_group[tag] = group_name
             except Exception as e:
                 print(f"Warning: Failed to load tag group {json_file}: {e}")
+        
+        self._loaded = True
     
     def get_tag_group(self, tag: str) -> str:
         """Get the group name for a given tag, returns 'General' if not found in any group"""
