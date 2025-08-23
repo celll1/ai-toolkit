@@ -1923,15 +1923,42 @@ class BaseSDTrainProcess(BaseTrainProcess):
             for group in optimizer.param_groups:
                 previous_lrs.append(group['lr'])
 
-            try:
-                print_acc(f"Loading optimizer state from {optimizer_state_file_path}")
-                optimizer_state_dict = torch.load(optimizer_state_file_path, weights_only=True)
-                optimizer.load_state_dict(optimizer_state_dict)
-                del optimizer_state_dict
-                flush()
-            except Exception as e:
-                print_acc(f"Failed to load optimizer state from {optimizer_state_file_path}")
-                print_acc(e)
+            # Check if user wants to force reset optimizer
+            if self.train_config.reset_optimizer_on_resume:
+                print_acc("📌 Optimizer reset requested (reset_optimizer_on_resume=True)")
+                print_acc("   Starting with fresh optimizer state")
+            else:
+                try:
+                    print_acc(f"Loading optimizer state from {optimizer_state_file_path}")
+                    optimizer_state_dict = torch.load(optimizer_state_file_path, weights_only=True)
+                    
+                    # Check if optimizer state is compatible
+                    try:
+                        optimizer.load_state_dict(optimizer_state_dict)
+                        print_acc("Successfully loaded optimizer state")
+                    except (ValueError, KeyError, RuntimeError) as load_error:
+                        # Common errors when optimizer type changed or parameters mismatch
+                        error_msg = str(load_error)
+                        if 'betas' in error_msg or 'state' in error_msg or 'param_groups' in error_msg:
+                            print_acc(f"⚠️  Optimizer state incompatible (likely optimizer type changed): {load_error}")
+                            print_acc("🔄 Reinitializing optimizer from scratch...")
+                            print_acc("   Training will continue but optimizer state is reset.")
+                            print_acc("   This is normal when changing optimizer type (e.g., adafactor → adamw8bit)")
+                            # Don't load the state, just continue with fresh optimizer
+                        else:
+                            # Re-raise if it's an unexpected error
+                            raise load_error
+                    
+                    del optimizer_state_dict
+                    flush()
+                except FileNotFoundError:
+                    print_acc(f"Optimizer state file not found at {optimizer_state_file_path}")
+                    print_acc("Starting with fresh optimizer state")
+                except Exception as e:
+                    print_acc(f"⚠️  Unexpected error loading optimizer state: {e}")
+                    print_acc("Continuing with fresh optimizer state")
+                    import traceback
+                    traceback.print_exc()
 
             # update the optimizer LR from the params
             print_acc(f"Updating optimizer LR from params")
