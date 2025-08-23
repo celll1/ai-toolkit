@@ -23,6 +23,7 @@ from toolkit.control_generator import ControlGenerator
 from toolkit.metadata import get_meta_for_safetensors
 from toolkit.models.pixtral_vision import PixtralVisionImagePreprocessorCompatible
 from toolkit.prompt_utils import inject_trigger_into_prompt
+from toolkit.tag_group_utils import TagGroupManager
 from torchvision import transforms
 from PIL import Image, ImageFilter, ImageOps
 from PIL.ImageOps import exif_transpose
@@ -363,7 +364,8 @@ class CaptionProcessingDTOMixin:
             to_replace_list=None,
             add_if_not_present=False,
             short_caption=False,
-            epoch_num=0
+            epoch_num=0,
+            tag_group_manager=None
     ):
         if short_caption:
             raw_caption = self.raw_caption_short
@@ -412,7 +414,21 @@ class CaptionProcessingDTOMixin:
                 seed = int(hashlib.md5(seed_str.encode()).hexdigest(), 16) % (2**32)
                 rng = random.Random(seed)
                 
-                if self.dataset_config.shuffle_mode == 'keep_first_n' and self.dataset_config.shuffle_keep_first_n > 0:
+                if self.dataset_config.shuffle_mode == 'tag_group' and self.dataset_config.shuffle_tag_groups:
+                    # Tag group-based shuffle
+                    if tag_group_manager is None:
+                        # Initialize TagGroupManager if not provided
+                        tag_group_manager = TagGroupManager(self.dataset_config.tag_group_dir)
+                    keep_n = self.dataset_config.shuffle_keep_first_n if self.dataset_config.shuffle_keep_first_n > 0 else 0
+                    token_list = tag_group_manager.shuffle_by_groups(
+                        token_list, 
+                        self.dataset_config.shuffle_tag_groups,
+                        keep_first_n=keep_n,
+                        exclude_person_count=self.dataset_config.exclude_person_count_tags,
+                        shuffle_together=self.dataset_config.shuffle_groups_together,
+                        rng=rng
+                    )
+                elif self.dataset_config.shuffle_mode == 'keep_first_n' and self.dataset_config.shuffle_keep_first_n > 0:
                     # Keep first n tokens in place
                     keep_n = min(self.dataset_config.shuffle_keep_first_n, len(token_list))
                     first_tokens = token_list[:keep_n]
@@ -424,7 +440,27 @@ class CaptionProcessingDTOMixin:
                     rng.shuffle(token_list)
             else:
                 # Original behavior: completely random every time
-                random.shuffle(token_list)
+                if self.dataset_config.shuffle_mode == 'tag_group' and self.dataset_config.shuffle_tag_groups:
+                    # Tag group-based shuffle with random seed
+                    if tag_group_manager is None:
+                        tag_group_manager = TagGroupManager(self.dataset_config.tag_group_dir)
+                    keep_n = self.dataset_config.shuffle_keep_first_n if self.dataset_config.shuffle_keep_first_n > 0 else 0
+                    token_list = tag_group_manager.shuffle_by_groups(
+                        token_list,
+                        self.dataset_config.shuffle_tag_groups,
+                        keep_first_n=keep_n,
+                        exclude_person_count=self.dataset_config.exclude_person_count_tags,
+                        shuffle_together=self.dataset_config.shuffle_groups_together
+                    )
+                elif self.dataset_config.shuffle_mode == 'keep_first_n' and self.dataset_config.shuffle_keep_first_n > 0:
+                    # Keep first n tokens in place
+                    keep_n = min(self.dataset_config.shuffle_keep_first_n, len(token_list))
+                    first_tokens = token_list[:keep_n]
+                    rest_tokens = token_list[keep_n:]
+                    random.shuffle(rest_tokens)
+                    token_list = first_tokens + rest_tokens
+                else:
+                    random.shuffle(token_list)
 
         # join back together
         caption = ', '.join(token_list)
@@ -459,7 +495,20 @@ class CaptionProcessingDTOMixin:
                 seed = int(hashlib.md5(seed_str.encode()).hexdigest(), 16) % (2**32)
                 rng = random.Random(seed)
                 
-                if self.dataset_config.shuffle_mode == 'keep_first_n' and self.dataset_config.shuffle_keep_first_n > 0:
+                if self.dataset_config.shuffle_mode == 'tag_group' and self.dataset_config.shuffle_tag_groups:
+                    # Tag group-based shuffle
+                    if tag_group_manager is None:
+                        tag_group_manager = TagGroupManager(self.dataset_config.tag_group_dir)
+                    keep_n = self.dataset_config.shuffle_keep_first_n if self.dataset_config.shuffle_keep_first_n > 0 else 0
+                    token_list = tag_group_manager.shuffle_by_groups(
+                        token_list,
+                        self.dataset_config.shuffle_tag_groups,
+                        keep_first_n=keep_n,
+                        exclude_person_count=self.dataset_config.exclude_person_count_tags,
+                        shuffle_together=self.dataset_config.shuffle_groups_together,
+                        rng=rng
+                    )
+                elif self.dataset_config.shuffle_mode == 'keep_first_n' and self.dataset_config.shuffle_keep_first_n > 0:
                     # Keep first n tokens in place
                     keep_n = min(self.dataset_config.shuffle_keep_first_n, len(token_list))
                     first_tokens = token_list[:keep_n]
@@ -471,7 +520,27 @@ class CaptionProcessingDTOMixin:
                     rng.shuffle(token_list)
             else:
                 # Original behavior: completely random every time
-                random.shuffle(token_list)
+                if self.dataset_config.shuffle_mode == 'tag_group' and self.dataset_config.shuffle_tag_groups:
+                    # Tag group-based shuffle with random seed
+                    if tag_group_manager is None:
+                        tag_group_manager = TagGroupManager(self.dataset_config.tag_group_dir)
+                    keep_n = self.dataset_config.shuffle_keep_first_n if self.dataset_config.shuffle_keep_first_n > 0 else 0
+                    token_list = tag_group_manager.shuffle_by_groups(
+                        token_list,
+                        self.dataset_config.shuffle_tag_groups,
+                        keep_first_n=keep_n,
+                        exclude_person_count=self.dataset_config.exclude_person_count_tags,
+                        shuffle_together=self.dataset_config.shuffle_groups_together
+                    )
+                elif self.dataset_config.shuffle_mode == 'keep_first_n' and self.dataset_config.shuffle_keep_first_n > 0:
+                    # Keep first n tokens in place
+                    keep_n = min(self.dataset_config.shuffle_keep_first_n, len(token_list))
+                    first_tokens = token_list[:keep_n]
+                    rest_tokens = token_list[keep_n:]
+                    random.shuffle(rest_tokens)
+                    token_list = first_tokens + rest_tokens
+                else:
+                    random.shuffle(token_list)
             
             caption = ', '.join(token_list)
 

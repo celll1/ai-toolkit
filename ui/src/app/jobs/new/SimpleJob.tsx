@@ -708,6 +708,7 @@ export default function SimpleJob({
                               options={[
                                 { value: 'all', label: 'Shuffle All Tags' },
                                 { value: 'keep_first_n', label: 'Keep First N Tags' },
+                                { value: 'tag_group', label: 'Shuffle by Tag Group' },
                               ]}
                             />
                             {dataset.shuffle_mode === 'keep_first_n' && (
@@ -720,6 +721,59 @@ export default function SimpleJob({
                                 placeholder="eg. 3"
                                 min={0}
                               />
+                            )}
+                            {dataset.shuffle_mode === 'tag_group' && (
+                              <>
+                                <div className="pt-2">
+                                  <label className="text-sm text-gray-400">Select Tag Groups to Shuffle</label>
+                                  <div className="space-y-1 mt-1">
+                                    {['Artist', 'Character', 'Copyright', 'General', 'Meta', 'Model', 'Rating'].map(group => (
+                                      <Checkbox
+                                        key={group}
+                                        label={group}
+                                        checked={dataset.shuffle_tag_groups?.includes(group) || false}
+                                        onChange={checked => {
+                                          const currentGroups = dataset.shuffle_tag_groups || [];
+                                          const newGroups = checked 
+                                            ? [...currentGroups, group]
+                                            : currentGroups.filter(g => g !== group);
+                                          setJobConfig(newGroups, `config.process[0].datasets[${i}].shuffle_tag_groups`);
+                                        }}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                                <Checkbox
+                                  label="Exclude Person Count Tags"
+                                  className="pt-2"
+                                  checked={dataset.exclude_person_count_tags || false}
+                                  docKey="datasets.exclude_person_count_tags"
+                                  onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].exclude_person_count_tags`)}
+                                />
+                                <Checkbox
+                                  label="Shuffle Groups Together"
+                                  className="pt-2"
+                                  checked={dataset.shuffle_groups_together || false}
+                                  docKey="datasets.shuffle_groups_together"
+                                  onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].shuffle_groups_together`)}
+                                />
+                                <NumberInput
+                                  label="Keep First N Tags (optional)"
+                                  className="pt-2"
+                                  docKey="datasets.shuffle_keep_first_n"
+                                  value={dataset.shuffle_keep_first_n || 0}
+                                  onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].shuffle_keep_first_n`)}
+                                  placeholder="0"
+                                  min={0}
+                                />
+                                <TextInput
+                                  label="Tag Group Directory"
+                                  className="pt-2"
+                                  value={dataset.tag_group_dir || 'taggroup'}
+                                  onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].tag_group_dir`)}
+                                  placeholder="taggroup"
+                                />
+                              </>
                             )}
                           </>
                         )}

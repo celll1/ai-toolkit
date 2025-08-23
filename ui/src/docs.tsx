@@ -158,6 +158,8 @@ const docs: { [key: string]: ConfigDoc } = {
         <br />
         <strong>Keep First N:</strong> Keep the first N tags in their original position and shuffle the rest.
         <br />
+        <strong>Tag Group:</strong> Shuffle only tags from selected groups (Artist, Character, Copyright, General, Meta, Model) while keeping other tags in fixed positions.
+        <br />
         Useful for keeping important tags like ratings, characters, or series names in consistent positions.
       </>
     ),
@@ -171,6 +173,76 @@ const docs: { [key: string]: ConfigDoc } = {
         Example with N=2: "sensitive, 1girl, blue hair, long hair" → "sensitive, 1girl, long hair, blue hair"
         <br />
         Commonly used to preserve rating tags and character information.
+        <br />
+        When using Tag Group mode, this works in combination - first N tags are kept, then selected groups are shuffled among the remaining tags.
+      </>
+    ),
+  },
+  'datasets.shuffle_tag_groups': {
+    title: 'Tag Groups to Shuffle',
+    description: (
+      <>
+        Select which tag groups should be shuffled when using Tag Group shuffle mode.
+        <br />
+        Tags are categorized based on JSON files in the taggroup directory:
+        <br />
+        • <strong>Artist:</strong> Artist names and styles
+        <br />
+        • <strong>Character:</strong> Character names
+        <br />
+        • <strong>Copyright:</strong> Series, franchises, and copyright holders
+        <br />
+        • <strong>General:</strong> General descriptive tags (or unmatched tags)
+        <br />
+        • <strong>Meta:</strong> Meta information tags
+        <br />
+        • <strong>Model:</strong> Model or version specific tags
+        <br />
+        • <strong>Rating:</strong> Content rating tags (general, sensitive, questionable, explicit, safe, nsfw)
+        <br />
+        Tags not found in any group JSON are treated as General tags.
+      </>
+    ),
+  },
+  'datasets.tag_group_dir': {
+    title: 'Tag Group Directory',
+    description: (
+      <>
+        Directory containing tag group JSON files for categorizing tags.
+        <br />
+        Default: "taggroup"
+        <br />
+        Each JSON file should be named after its group (e.g., Character.json) and contain tag names as keys.
+      </>
+    ),
+  },
+  'datasets.exclude_person_count_tags': {
+    title: 'Exclude Person Count Tags',
+    description: (
+      <>
+        When enabled, excludes person count related tags from shuffling in the General group.
+        <br />
+        This keeps tags like "1girl", "2boys", "solo", "group", "multiple_girls", "*_focus" tags, etc. in their original positions.
+        <br />
+        Useful for maintaining consistency in person/subject count information while shuffling other descriptive tags.
+        <br />
+        Only applies when using Tag Group shuffle mode with General group selected.
+      </>
+    ),
+  },
+  'datasets.shuffle_groups_together': {
+    title: 'Shuffle Groups Together',
+    description: (
+      <>
+        Controls how multiple selected tag groups are shuffled:
+        <br />
+        <strong>Enabled:</strong> All tags from selected groups are mixed and shuffled together as one pool.
+        <br />
+        Example: Character and General tags are completely intermixed.
+        <br />
+        <strong>Disabled:</strong> Each selected group is shuffled internally but groups maintain their relative positions.
+        <br />
+        Example: Character tags stay in their section, General tags stay in theirs, but each section is shuffled internally.
       </>
     ),
   },
