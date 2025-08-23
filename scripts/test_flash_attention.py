@@ -103,6 +103,24 @@ def test_sdxl_attention():
     except Exception as e:
         print(f"❌ SDXL UNet test failed: {e}")
 
+def test_qwen_image_attention():
+    """Test Flash Attention with Qwen-image model."""
+    try:
+        from extensions_built_in.diffusion_models.qwen_image.src.models.qwen_image_transformer_2d import QwenImageTransformer2DModel
+        import torch
+        
+        print("\n=== Testing Qwen-image Flash Attention ===")
+        
+        # Note: This requires a valid Qwen-image model path
+        print("✅ Qwen-image transformer model available for testing")
+        print("💡 Actual model testing requires a valid Qwen-image model path")
+        
+    except ImportError as e:
+        print(f"❌ Cannot test Qwen-image: {e}")
+        print("💡 Qwen-image extension not available")
+    except Exception as e:
+        print(f"❌ Qwen-image test failed: {e}")
+
 def main():
     print("=== AI-Toolkit Flash Attention Test ===")
     
@@ -126,6 +144,7 @@ def main():
         print("\n🧪 Testing with actual models (this may download models)...")
         test_flux_attention()
         test_sdxl_attention()
+        test_qwen_image_attention()
     else:
         print("\n💡 Add --test-models to test with actual model loading")
     

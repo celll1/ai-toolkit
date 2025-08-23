@@ -96,6 +96,17 @@ class QwenImageModel(BaseModel):
             subfolder=transformer_subfolder,
             torch_dtype=dtype
         )
+        
+        # Enable attention optimization if requested
+        if self.model_config.attention_type != "default":
+            from toolkit.util.flash_attention import enable_flash_attention_for_model
+            success = enable_flash_attention_for_model(
+                transformer,
+                attention_type=self.model_config.attention_type,
+                verbose=True
+            )
+            if not success:
+                self.print_and_status_update(f"Failed to enable {self.model_config.attention_type} for Qwen-image, using default attention")
 
         if self.model_config.quantize:
             self.print_and_status_update("Quantizing Transformer")
