@@ -224,15 +224,26 @@ export default function SimpleJob({
               placeholder=""
               required
             />
-            {modelArch?.additionalSections?.includes('model.low_vram') && (
-              <FormGroup label="Options">
+            <FormGroup label="Options">
+              {modelArch?.additionalSections?.includes('model.low_vram') && (
                 <Checkbox
                   label="Low VRAM"
                   checked={jobConfig.config.process[0].model.low_vram}
                   onChange={value => setJobConfig(value, 'config.process[0].model.low_vram')}
                 />
-              </FormGroup>
-            )}
+              )}
+              <SelectInput
+                label="Attention Type"
+                docKey="model.attention_type"
+                value={jobConfig.config.process[0].model.attention_type || 'default'}
+                onChange={value => setJobConfig(value, 'config.process[0].model.attention_type')}
+                options={[
+                  { value: 'default', label: 'Default' },
+                  { value: 'flash_attention_2', label: 'Flash Attention 2' },
+                  { value: 'sdpa', label: 'SDPA (PyTorch 2.0+)' },
+                ]}
+              />
+            </FormGroup>
           </Card>
           {modelArch?.disableSections?.includes('model.quantize') ? null : (
             <Card title="Quantization">
@@ -266,19 +277,6 @@ export default function SimpleJob({
               />
             </Card>
           )}
-          <Card title="Attention Optimization">
-            <SelectInput
-              label="Attention Type"
-              docKey="model.attention_type"
-              value={jobConfig.config.process[0].model.attention_type || 'default'}
-              onChange={value => setJobConfig(value, 'config.process[0].model.attention_type')}
-              options={[
-                { value: 'default', label: 'Default' },
-                { value: 'flash_attention_2', label: 'Flash Attention 2' },
-                { value: 'sdpa', label: 'SDPA (PyTorch 2.0+)' },
-              ]}
-            />
-          </Card>
           {modelArch?.additionalSections?.includes('model.multistage') && (
             <Card title="Multistage">
               <FormGroup label="Stages to Train" docKey={'model.multistage'}>
