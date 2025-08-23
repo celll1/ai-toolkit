@@ -91,10 +91,28 @@ class QwenImageModel(BaseModel):
                 base_model_path = model_path
 
         self.print_and_status_update("Loading transformer")
+        
+        # Prepare loading arguments
+        load_args = {
+            "subfolder": transformer_subfolder,
+            "torch_dtype": dtype
+        }
+        
+        # Add attention implementation if specified
+        if self.model_config.attention_type != "default":
+            attn_implementation = None
+            if self.model_config.attention_type == "flash_attention_2":
+                attn_implementation = "flash_attention_2"
+            elif self.model_config.attention_type == "sdpa":
+                attn_implementation = "sdpa"
+            
+            if attn_implementation:
+                load_args["_attn_implementation"] = attn_implementation
+                self.print_and_status_update(f"Loading transformer with {attn_implementation} attention")
+        
         transformer = QwenImageTransformer2DModel.from_pretrained(
             transformer_path,
-            subfolder=transformer_subfolder,
-            torch_dtype=dtype
+            **load_args
         )
         
         # Enable attention optimization if requested
