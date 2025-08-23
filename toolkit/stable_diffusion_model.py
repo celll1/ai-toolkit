@@ -373,6 +373,18 @@ class StableDiffusion:
                 subfolder=subfolder,
                 torch_dtype=dtype,
             )
+            
+            # Enable attention optimization if requested
+            if self.model_config.attention_type != "default":
+                from toolkit.util.flash_attention import enable_flash_attention_for_model
+                success = enable_flash_attention_for_model(
+                    transformer,
+                    attention_type=self.model_config.attention_type,
+                    verbose=True
+                )
+                if not success:
+                    self.print_and_status_update(f"Failed to enable {self.model_config.attention_type}, using default attention")
+            
             if not self.low_vram:
                 # for low v ram, we leave it on the cpu. Quantizes slower, but allows training on primary gpu
                 transformer.to(self.quantize_device, dtype=dtype)
@@ -630,6 +642,18 @@ class StableDiffusion:
                 # low_cpu_mem_usage=False,
                 # device_map=None
             )
+            
+            # Enable attention optimization if requested
+            if self.model_config.attention_type != "default":
+                from toolkit.util.flash_attention import enable_flash_attention_for_model
+                success = enable_flash_attention_for_model(
+                    transformer,
+                    attention_type=self.model_config.attention_type,
+                    verbose=True
+                )
+                if not success:
+                    self.print_and_status_update(f"Failed to enable {self.model_config.attention_type}, using default attention")
+            
             # hack in model gpu splitter
             if self.model_config.split_model_over_gpus:
                 add_model_gpu_splitter_to_flux(
@@ -994,6 +1018,18 @@ class StableDiffusion:
             self.unet = pipe.transformer
         else:
             self.unet: 'UNet2DConditionModel' = pipe.unet
+            
+            # Enable attention optimization for UNet-based models
+            if self.model_config.attention_type != "default":
+                from toolkit.util.flash_attention import enable_flash_attention_for_model
+                success = enable_flash_attention_for_model(
+                    self.unet,
+                    attention_type=self.model_config.attention_type,
+                    verbose=True
+                )
+                if not success:
+                    self.print_and_status_update(f"Failed to enable {self.model_config.attention_type} for UNet, using default attention")
+        
         self.vae: 'AutoencoderKL' = pipe.vae.to(self.vae_device_torch, dtype=self.vae_torch_dtype)
         self.vae.eval()
         self.vae.requires_grad_(False)

@@ -246,6 +246,24 @@ const docs: { [key: string]: ConfigDoc } = {
       </>
     ),
   },
+  'model.attention_type': {
+    title: 'Attention Type',
+    description: (
+      <>
+        Choose the attention implementation for faster training and inference:
+        <br />
+        <strong>Default:</strong> Standard attention implementation.
+        <br />
+        <strong>Flash Attention 2:</strong> Memory-efficient attention for significant speedup (requires flash-attn package).
+        <br />
+        <strong>SDPA:</strong> PyTorch's Scaled Dot-Product Attention (PyTorch 2.0+ built-in optimization).
+        <br />
+        Flash Attention 2 can provide 2-3x speedup with lower memory usage, especially beneficial for large models like FLUX.
+        <br />
+        Install flash-attn with: <code>pip install flash-attn --no-build-isolation</code>
+      </>
+    ),
+  },
   'model.multistage': {
     title: 'Stages to Train',
     description: (

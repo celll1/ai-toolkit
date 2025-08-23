@@ -266,6 +266,19 @@ export default function SimpleJob({
               />
             </Card>
           )}
+          <Card title="Attention Optimization">
+            <SelectInput
+              label="Attention Type"
+              docKey="model.attention_type"
+              value={jobConfig.config.process[0].model.attention_type || 'default'}
+              onChange={value => setJobConfig(value, 'config.process[0].model.attention_type')}
+              options={[
+                { value: 'default', label: 'Default' },
+                { value: 'flash_attention_2', label: 'Flash Attention 2' },
+                { value: 'sdpa', label: 'SDPA (PyTorch 2.0+)' },
+              ]}
+            />
+          </Card>
           {modelArch?.additionalSections?.includes('model.multistage') && (
             <Card title="Multistage">
               <FormGroup label="Stages to Train" docKey={'model.multistage'}>

@@ -617,6 +617,9 @@ class ModelConfig:
         # compile the model with torch compile
         self.compile = kwargs.get("compile", False)
         
+        # attention implementation type: "default", "flash_attention_2", or "sdpa"
+        self.attention_type = kwargs.get("attention_type", "default")
+        
         # kwargs to pass to the model
         self.model_kwargs = kwargs.get("model_kwargs", {})
         
