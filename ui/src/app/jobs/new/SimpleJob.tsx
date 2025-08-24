@@ -798,7 +798,7 @@ export default function SimpleJob({
                                 <div className="pt-2">
                                   <label className="text-sm text-gray-400">Select Tag Groups to Shuffle</label>
                                   <div className="space-y-1 mt-1">
-                                    {['Artist', 'Character', 'Copyright', 'General', 'Meta', 'Model', 'Rating'].map(group => (
+                                    {['Artist', 'Character', 'Copyright', 'General', 'Meta', 'Model', 'Quality', 'Rating'].map(group => (
                                       <Checkbox
                                         key={group}
                                         label={group}

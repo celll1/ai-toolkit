@@ -21,6 +21,7 @@ PERSON_COUNT_TAG_PATTERNS = [
     re.compile(r"^still_life$")  # still_life is also person-related
 ]
 
+
 # 高速化のため、よく使われるパターンをプリコンパイル
 SIMPLE_PERSON_PATTERNS = {
     'no_humans', 'multiple_girls', 'multiple_boys', 
