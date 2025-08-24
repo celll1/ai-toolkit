@@ -828,6 +828,18 @@ export default function SimpleJob({
                                   docKey="datasets.shuffle_groups_together"
                                   onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].shuffle_groups_together`)}
                                 />
+                                <SelectInput
+                                  label="Tag Normalization Format"
+                                  className="pt-2"
+                                  value={dataset.tag_normalization_format || 'space_escaped'}
+                                  docKey="datasets.tag_normalization_format"
+                                  onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].tag_normalization_format`)}
+                                  options={[
+                                    { value: 'underscore', label: 'Underscore (tag_name_(subcategory))' },
+                                    { value: 'space', label: 'Space (tag name (subcategory))' },
+                                    { value: 'space_escaped', label: 'Space + Escaped (tag name \\(subcategory\\))' }
+                                  ]}
+                                />
                                 <NumberInput
                                   label="Keep First N Tags (optional)"
                                   className="pt-2"

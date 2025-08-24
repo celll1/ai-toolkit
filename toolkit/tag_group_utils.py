@@ -1,305 +1,281 @@
 import json
 import os
-import re
-import numpy as np
-from typing import Dict, List, Set, Tuple, Optional, Union
+from typing import Dict, List, Set, Tuple, Optional
 from pathlib import Path
-from functools import lru_cache
+from enum import Enum
 
-# Person count tag patterns
-PERSON_COUNT_TAG_PATTERNS = [
-    re.compile(r"^\d+girls?$"),
-    re.compile(r"^\d+boys?$"),
-    re.compile(r"^\d+others?$"),
-    re.compile(r"^no_humans$"),
-    re.compile(r"^multiple_girls$"),
-    re.compile(r"^multiple_boys$"),
-    re.compile(r"^multiple_others$"),
-    re.compile(r"^group$"),  # group tag is also person-related
-    re.compile(r"^solo$"),   # solo is also person-related
-    re.compile(r"^.*_focus$"),  # any *_focus tag (solo_focus, male_focus, etc.)
-    re.compile(r"^still_life$")  # still_life is also person-related
-]
+class TagNormalizationFormat(Enum):
+    """タグ正規化の出力形式"""
+    UNDERSCORE = "underscore"  # tag_name_(subcategory)
+    SPACE = "space"  # tag name (subcategory)
+    SPACE_ESCAPED = "space_escaped"  # tag name \(subcategory\)
 
-
-# 高速化のため、よく使われるパターンをプリコンパイル
-SIMPLE_PERSON_PATTERNS = {
-    'no_humans', 'multiple_girls', 'multiple_boys', 
-    'multiple_others', 'group', 'solo', 'still_life'
+# 人数関連タグの完全なリスト（高速判定用）
+PERSON_COUNT_SIMPLE_TAGS = {
+    'no_humans', 'no humans',
+    'solo', 
+    'group',
+    'still_life', 'still life',
+    'multiple_girls', 'multiple girls',
+    'multiple_boys', 'multiple boys', 
+    'multiple_others', 'multiple others',
+    # フォーカス系タグ
+    'solo_focus', 'solo focus',
+    'male_focus', 'male focus',
+    'other_focus', 'other focus',
+    # 数字付きタグ（1-5 + 6+）をハードコード
+    '1girl', '2girls', '3girls', '4girls', '5girls', '6+girls',
+    '1boy', '2boys', '3boys', '4boys', '5boys', '6+boys',
+    '1other', '2others', '3others', '4others', '5others', '6+others',
 }
 
 class TagGroupManager:
-    def __init__(self, tag_group_dir: str = 'taggroup'):
+    def __init__(self, tag_group_dir: str = 'taggroup', 
+                 normalization_format: TagNormalizationFormat = TagNormalizationFormat.SPACE_ESCAPED):
         self.tag_group_dir = tag_group_dir
+        self.normalization_format = normalization_format
         self.tag_groups: Dict[str, Set[str]] = {}
         self.tag_to_group: Dict[str, str] = {}
-        self._loaded = False
-        # キャッシュ
-        self._person_count_cache: Dict[str, bool] = {}
-        self._stripped_cache: Dict[str, str] = {}
-        # グループ名のインデックスマッピング（NumPy用）
-        self._group_to_idx: Dict[str, int] = {}
-        self._idx_to_group: Dict[int, str] = {}
+        # 正規化済みタグのキャッシュ（処理済みの結果を保存）
+        self._normalized_cache: Dict[str, str] = {}
+        self._person_tag_cache: Dict[str, bool] = {}
         self.load_tag_groups()
     
     def load_tag_groups(self):
-        """Load all tag group JSON files from the specified directory"""
-        if self._loaded:
-            return  # Already loaded, skip
-        
+        """タググループJSONファイルを高速に読み込む"""
         base_path = Path(self.tag_group_dir)
         if not base_path.exists():
-            self._loaded = True
             return
         
-        # 一括でJSONファイルを読み込む
-        json_files = list(base_path.glob('*.json'))
-        
-        # バッチ処理で高速化
-        all_tags = {}
-        for json_file in json_files:
+        # 全JSONファイルを一括処理
+        for json_file in base_path.glob('*.json'):
             group_name = json_file.stem
             try:
                 with open(json_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    self.tag_groups[group_name] = set(data.keys())
-                    for tag in data.keys():
-                        all_tags[tag] = group_name
+                    # 複数の正規化パターンを登録
+                    for original_tag in data.keys():
+                        # 様々な正規化パターンを生成して登録
+                        normalized_patterns = self._generate_normalized_patterns(original_tag)
+                        for pattern in normalized_patterns:
+                            self.tag_to_group[pattern] = group_name
+                        
+                        # グループにはベース正規化形式を保存
+                        base_normalized = self._base_normalize(original_tag)
+                        if group_name not in self.tag_groups:
+                            self.tag_groups[group_name] = set()
+                        self.tag_groups[group_name].add(base_normalized)
+                        
             except Exception as e:
-                print(f"Warning: Failed to load tag group {json_file}: {e}")
-        
-        # 一括更新
-        self.tag_to_group = all_tags
-        
-        # グループインデックスの作成
-        unique_groups = list(set(all_tags.values()))
-        unique_groups.append('General')  # デフォルトグループ
-        self._group_to_idx = {g: i for i, g in enumerate(unique_groups)}
-        self._idx_to_group = {i: g for g, i in self._group_to_idx.items()}
-        
-        self._loaded = True
+                print(f"Warning: Failed to load {json_file}: {e}")
     
-    @lru_cache(maxsize=2048)
-    def _strip_cached(self, tag: str) -> str:
-        """文字列のstrip操作をキャッシュ"""
-        return tag.strip()
+    def _generate_normalized_patterns(self, tag: str) -> Set[str]:
+        """タグから可能な全ての正規化パターンを生成"""
+        patterns = set()
+        
+        # ベース正規化（小文字、前後の空白削除）
+        base = tag.lower().strip()
+        patterns.add(base)
+        
+        # アンダースコアをスペースに置換
+        space_version = base.replace('_', ' ')
+        patterns.add(space_version)
+        
+        # 括弧のエスケープパターン
+        # tag_name_(subcategory) の場合:
+        # 1. tag_name_(subcategory)
+        # 2. tag name (subcategory)
+        # 3. tag name \(subcategory\)
+        
+        if '(' in base or ')' in base:
+            # エスケープされた括弧
+            escaped_version = base.replace('(', '\\(').replace(')', '\\)')
+            patterns.add(escaped_version)
+            
+            # スペース版のエスケープ
+            space_escaped = space_version.replace('(', '\\(').replace(')', '\\)')
+            patterns.add(space_escaped)
+            
+            # 既にエスケープされている場合の処理
+            if '\\(' in base or '\\)' in base:
+                # エスケープを除去したバージョン
+                unescaped = base.replace('\\(', '(').replace('\\)', ')')
+                patterns.add(unescaped)
+                space_unescaped = unescaped.replace('_', ' ')
+                patterns.add(space_unescaped)
+        
+        return patterns
     
-    @lru_cache(maxsize=2048)
+    def _base_normalize(self, tag: str) -> str:
+        """ベース正規化（内部処理用）"""
+        # 小文字化、前後の空白削除、アンダースコアをスペースに
+        normalized = tag.lower().strip().replace('_', ' ')
+        # エスケープを除去
+        normalized = normalized.replace('\\(', '(').replace('\\)', ')')
+        return normalized
+    
+    def normalize_tag(self, tag: str) -> str:
+        """タグを正規化（キャッシュ使用）"""
+        if tag in self._normalized_cache:
+            return self._normalized_cache[tag]
+        
+        normalized = self._base_normalize(tag)
+        self._normalized_cache[tag] = normalized
+        return normalized
+    
     def get_tag_group(self, tag: str) -> str:
-        """Get the group name for a given tag"""
-        tag = self._strip_cached(tag)
-        return self.tag_to_group.get(tag, 'General')
+        """タグのグループを高速に取得"""
+        # 入力タグをそのままチェック（高速パス）
+        tag_lower = tag.lower().strip()
+        if tag_lower in self.tag_to_group:
+            return self.tag_to_group[tag_lower]
+        
+        # 様々な正規化パターンを試す
+        patterns = self._generate_normalized_patterns(tag)
+        for pattern in patterns:
+            if pattern in self.tag_to_group:
+                # キャッシュに登録
+                self.tag_to_group[tag_lower] = self.tag_to_group[pattern]
+                return self.tag_to_group[pattern]
+        
+        return 'General'
     
     def is_person_count_tag(self, tag: str) -> bool:
-        """Check if a tag is a person count related tag"""
-        tag = self._strip_cached(tag)
+        """人数関連タグかを高速判定"""
+        # 入力タグを小文字化
+        tag_lower = tag.lower().strip()
         
         # キャッシュチェック
-        if tag in self._person_count_cache:
-            return self._person_count_cache[tag]
+        if tag_lower in self._person_tag_cache:
+            return self._person_tag_cache[tag_lower]
         
-        # 高速チェック: シンプルなパターン
-        if tag in SIMPLE_PERSON_PATTERNS:
-            self._person_count_cache[tag] = True
-            return True
+        result = False
         
-        # 数字で始まるパターンの高速チェック
-        if tag and tag[0].isdigit():
-            if tag.endswith('girl') or tag.endswith('girls') or \
-               tag.endswith('boy') or tag.endswith('boys') or \
-               tag.endswith('other') or tag.endswith('others'):
-                self._person_count_cache[tag] = True
-                return True
+        # 1. ハードコードされた人数タグの直接チェック
+        if tag_lower in PERSON_COUNT_SIMPLE_TAGS:
+            result = True
+        else:
+            # スペース/アンダースコア変換を試す
+            tag_with_space = tag_lower.replace('_', ' ')
+            tag_with_underscore = tag_lower.replace(' ', '_')
+            
+            if tag_with_space in PERSON_COUNT_SIMPLE_TAGS or tag_with_underscore in PERSON_COUNT_SIMPLE_TAGS:
+                result = True
+            # 2. _focus または " focus"で終わるタグ（上記でカバーされていないもの）
+            elif tag_lower.endswith('_focus') or tag_lower.endswith(' focus'):
+                result = True
         
-        # focus系の高速チェック
-        if tag.endswith('_focus'):
-            self._person_count_cache[tag] = True
-            return True
-        
-        # それ以外は正規表現でチェック（最後の手段）
-        result = any(pattern.match(tag) for pattern in PERSON_COUNT_TAG_PATTERNS)
-        self._person_count_cache[tag] = result
+        self._person_tag_cache[tag_lower] = result
         return result
     
-    def classify_tokens(self, tokens: List[str]) -> Dict[str, List[Tuple[int, str]]]:
-        """
-        Classify tokens by their group and return a dictionary with group names as keys
-        and lists of (original_index, token) tuples as values
-        """
-        classified = {}
-        for idx, token in enumerate(tokens):
-            token = token.strip()
-            if token:  # Skip empty tokens
-                group = self.get_tag_group(token)
-                if group not in classified:
-                    classified[group] = []
-                classified[group].append((idx, token))
-        return classified
+    def format_tag(self, tag: str) -> str:
+        """指定された形式でタグをフォーマット"""
+        if self.normalization_format == TagNormalizationFormat.UNDERSCORE:
+            # アンダースコア形式：スペースをアンダースコアに、括弧はそのまま
+            return tag.replace(' ', '_')
+        elif self.normalization_format == TagNormalizationFormat.SPACE:
+            # スペース形式：アンダースコアをスペースに、括弧はそのまま
+            return tag.replace('_', ' ')
+        else:  # TagNormalizationFormat.SPACE_ESCAPED (デフォルト)
+            # スペース＋エスケープ形式：アンダースコアをスペースに、括弧をエスケープ
+            formatted = tag.replace('_', ' ')
+            # 既にエスケープされていない括弧をエスケープ
+            if '\\(' not in formatted and '\\)' not in formatted:
+                formatted = formatted.replace('(', '\\(').replace(')', '\\)')
+            return formatted
     
-    def shuffle_by_groups_numpy(self, tokens: List[str], groups_to_shuffle: List[str], 
-                               keep_first_n: int = 0, exclude_person_count: bool = False,
-                               shuffle_together: bool = False, rng=None) -> List[str]:
-        """
-        NumPyを使用した高速シャッフル実装
-        """
+    def shuffle_by_groups(self, tokens: List[str], groups_to_shuffle: List[str], 
+                         keep_first_n: int = 0, exclude_person_count: bool = False,
+                         shuffle_together: bool = False, rng=None) -> List[str]:
+        """最適化されたシャッフル実装"""
         import random
         if rng is None:
             rng = random.Random()
-            np_rng = np.random.default_rng(rng.randint(0, 2**32-1))
-        else:
-            np_rng = np.random.default_rng(rng.randint(0, 2**32-1))
         
         # 基本チェック
         if not groups_to_shuffle or not tokens or len(tokens) <= keep_first_n:
             return tokens
         
-        n_tokens = len(tokens)
-        start_idx = max(0, keep_first_n)
-        
-        # NumPy配列に変換（効率的な操作のため）
-        token_array = np.array(tokens, dtype=object)
-        
-        # シャッフル対象のインデックスを収集
-        groups_set = set(groups_to_shuffle)
-        shuffleable_indices = []
-        
-        # ベクトル化された処理
-        for idx in range(start_idx, n_tokens):
-            token = self._strip_cached(tokens[idx])
-            if not token:
-                continue
-            
-            group = self.get_tag_group(token)
-            if group not in groups_set:
-                continue
-            
-            # Person count tagのチェック
-            if exclude_person_count and group == 'General' and self.is_person_count_tag(token):
-                continue
-            
-            shuffleable_indices.append(idx)
-        
-        # シャッフル対象がない場合
-        if len(shuffleable_indices) <= 1:
-            return tokens
-        
-        # NumPy配列でインデックス操作
-        shuffleable_indices = np.array(shuffleable_indices)
-        
-        if shuffle_together:
-            # 全体をシャッフル
-            shuffled_indices = shuffleable_indices.copy()
-            np_rng.shuffle(shuffled_indices)
-            token_array[shuffleable_indices] = token_array[shuffled_indices]
-        else:
-            # グループごとにシャッフル
-            # グループごとにインデックスを分類
-            group_indices = {}
-            for idx in shuffleable_indices:
-                token = self._strip_cached(tokens[idx])
-                group = self.get_tag_group(token)
-                if group not in group_indices:
-                    group_indices[group] = []
-                group_indices[group].append(idx)
-            
-            # 各グループをシャッフル
-            for group, indices in group_indices.items():
-                if len(indices) > 1:
-                    indices_array = np.array(indices)
-                    shuffled = indices_array.copy()
-                    np_rng.shuffle(shuffled)
-                    token_array[indices_array] = token_array[shuffled]
-        
-        return token_array.tolist()
-    
-    def shuffle_by_groups(self, tokens: List[str], groups_to_shuffle: List[str], 
-                         keep_first_n: int = 0, exclude_person_count: bool = False,
-                         shuffle_together: bool = False, rng=None) -> List[str]:
-        """
-        高速化されたシャッフル実装（NumPyが利用可能な場合はそちらを使用）
-        """
-        try:
-            # NumPyが利用可能ならNumPy版を使用
-            return self.shuffle_by_groups_numpy(tokens, groups_to_shuffle, 
-                                              keep_first_n, exclude_person_count,
-                                              shuffle_together, rng)
-        except:
-            # NumPyが使えない場合は従来の実装
-            return self._shuffle_by_groups_fallback(tokens, groups_to_shuffle,
-                                                   keep_first_n, exclude_person_count,
-                                                   shuffle_together, rng)
-    
-    def _shuffle_by_groups_fallback(self, tokens: List[str], groups_to_shuffle: List[str], 
-                                   keep_first_n: int = 0, exclude_person_count: bool = False,
-                                   shuffle_together: bool = False, rng=None) -> List[str]:
-        """従来の実装（フォールバック用）"""
-        import random
-        if rng is None:
-            rng = random.Random()
-        
-        if not groups_to_shuffle or not tokens:
-            return tokens
-        
-        # 事前計算
         groups_set = set(groups_to_shuffle)
         start_idx = max(0, keep_first_n)
         
-        # シャッフル対象を収集
+        # シャッフル対象を事前に分類
         if shuffle_together:
-            shuffleable = []
+            # 全体シャッフル用のインデックスとトークンを収集
+            shuffleable_items = []
             for idx in range(start_idx, len(tokens)):
-                token = self._strip_cached(tokens[idx])
+                token = tokens[idx].strip()
                 if not token:
                     continue
+                
                 group = self.get_tag_group(token)
-                if group in groups_set:
-                    if not (exclude_person_count and group == 'General' and self.is_person_count_tag(token)):
-                        shuffleable.append((idx, token))
+                if group not in groups_set:
+                    continue
+                
+                # Person count tagチェック（必要な場合のみ）
+                if exclude_person_count and group == 'General':
+                    if self.is_person_count_tag(token):
+                        continue
+                
+                shuffleable_items.append((idx, token))
             
-            if len(shuffleable) <= 1:
+            if len(shuffleable_items) <= 1:
                 return tokens
             
-            # シャッフル実行
-            result = tokens[:]
-            indices = [x[0] for x in shuffleable]
-            values = [x[1] for x in shuffleable]
+            # インデックスと値を分離してシャッフル
+            indices = [item[0] for item in shuffleable_items]
+            values = [item[1] for item in shuffleable_items]
             rng.shuffle(values)
+            
+            # 結果を構築（フォーマット適用）
+            result = tokens[:]
             for idx, val in zip(indices, values):
-                result[idx] = val
+                result[idx] = self.format_tag(val)
+            
             return result
         else:
-            # グループごとの処理
-            classified = {}
+            # グループごとのシャッフル
+            group_items: Dict[str, List[Tuple[int, str]]] = {}
+            
             for idx in range(start_idx, len(tokens)):
-                token = self._strip_cached(tokens[idx])
+                token = tokens[idx].strip()
                 if not token:
                     continue
+                
                 group = self.get_tag_group(token)
-                if group in groups_set:
-                    if not (exclude_person_count and group == 'General' and self.is_person_count_tag(token)):
-                        if group not in classified:
-                            classified[group] = []
-                        classified[group].append((idx, token))
+                if group not in groups_set:
+                    continue
+                
+                # Person count tagチェック（必要な場合のみ）
+                if exclude_person_count and group == 'General':
+                    if self.is_person_count_tag(token):
+                        continue
+                
+                if group not in group_items:
+                    group_items[group] = []
+                group_items[group].append((idx, token))
             
-            # シャッフル不要なら早期リターン
-            if all(len(classified.get(g, [])) <= 1 for g in groups_set):
+            # シャッフル不要な場合は早期リターン
+            if all(len(items) <= 1 for items in group_items.values()):
                 return tokens
             
-            # シャッフル実行
+            # 各グループをシャッフル（フォーマット適用）
             result = tokens[:]
-            for group, items in classified.items():
+            for group, items in group_items.items():
                 if len(items) > 1:
-                    indices = [x[0] for x in items]
-                    values = [x[1] for x in items]
+                    indices = [item[0] for item in items]
+                    values = [item[1] for item in items]
                     rng.shuffle(values)
                     for idx, val in zip(indices, values):
-                        result[idx] = val
+                        result[idx] = self.format_tag(val)
+                else:
+                    # シャッフルしない場合もフォーマットは適用
+                    for idx, val in items:
+                        result[idx] = self.format_tag(val)
             
             return result
     
     def clear_cache(self):
-        """キャッシュをクリアする"""
-        self._person_count_cache.clear()
-        self._stripped_cache.clear()
-        self.get_tag_group.cache_clear()
-        self._strip_cached.cache_clear()
+        """キャッシュをクリア"""
+        self._normalized_cache.clear()
+        self._person_tag_cache.clear()

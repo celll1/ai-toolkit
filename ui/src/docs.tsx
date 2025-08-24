@@ -267,6 +267,22 @@ const docs: { [key: string]: ConfigDoc } = {
       </>
     ),
   },
+  'datasets.tag_normalization_format': {
+    title: 'Tag Normalization Format',
+    description: (
+      <>
+        Controls how tags are formatted after shuffling:
+        <br />
+        <strong>Underscore:</strong> Uses underscores between words and keeps parentheses as-is (e.g., tag_name_(subcategory))
+        <br />
+        <strong>Space:</strong> Uses spaces between words and keeps parentheses as-is (e.g., tag name (subcategory))
+        <br />
+        <strong>Space + Escaped (Default):</strong> Uses spaces and escapes parentheses with backslashes (e.g., tag name \(subcategory\))
+        <br />
+        Choose the format that matches your training data requirements.
+      </>
+    ),
+  },
   'model.attention_type': {
     title: 'Attention Type',
     description: (

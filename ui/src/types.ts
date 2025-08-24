@@ -79,8 +79,12 @@ export interface DatasetConfig {
   caption_dropout_rate: number;
   shuffle_tokens?: boolean;
   shuffle_per_epoch?: boolean;
-  shuffle_mode?: 'all' | 'keep_first_n';
+  shuffle_mode?: 'all' | 'keep_first_n' | 'tag_group';
   shuffle_keep_first_n?: number;
+  shuffle_tag_groups?: string[];
+  exclude_person_count_tags?: boolean;
+  shuffle_groups_together?: boolean;
+  tag_normalization_format?: 'underscore' | 'space' | 'space_escaped';
   is_reg: boolean;
   network_weight: number;
   cache_latents_to_disk?: boolean;

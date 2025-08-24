@@ -427,7 +427,22 @@ class CaptionProcessingDTOMixin:
                     # Tag group-based shuffle
                     if tag_group_manager is None:
                         # Initialize TagGroupManager if not provided - cache it for future use
-                        tag_group_manager = TagGroupManager(self.dataset_config.tag_group_dir)
+                        # Get normalization format from config
+                        from toolkit.tag_group_utils import TagNormalizationFormat
+                        norm_format = TagNormalizationFormat.SPACE_ESCAPED  # default
+                        if hasattr(self.dataset_config, 'tag_normalization_format'):
+                            format_str = self.dataset_config.tag_normalization_format
+                            if format_str == 'underscore':
+                                norm_format = TagNormalizationFormat.UNDERSCORE
+                            elif format_str == 'space':
+                                norm_format = TagNormalizationFormat.SPACE
+                            elif format_str == 'space_escaped':
+                                norm_format = TagNormalizationFormat.SPACE_ESCAPED
+                        
+                        tag_group_manager = TagGroupManager(
+                            self.dataset_config.tag_group_dir,
+                            normalization_format=norm_format
+                        )
                         # Store in dataset config to avoid re-initialization
                         self.dataset_config._tag_group_manager = tag_group_manager
                     elif hasattr(self.dataset_config, '_tag_group_manager'):
@@ -462,7 +477,22 @@ class CaptionProcessingDTOMixin:
                             tag_group_manager = self.dataset_config._tag_group_manager
                         else:
                             # Initialize and cache TagGroupManager
-                            tag_group_manager = TagGroupManager(self.dataset_config.tag_group_dir)
+                            # Get normalization format from config
+                            from toolkit.tag_group_utils import TagNormalizationFormat
+                            norm_format = TagNormalizationFormat.SPACE_ESCAPED  # default
+                            if hasattr(self.dataset_config, 'tag_normalization_format'):
+                                format_str = self.dataset_config.tag_normalization_format
+                                if format_str == 'underscore':
+                                    norm_format = TagNormalizationFormat.UNDERSCORE
+                                elif format_str == 'space':
+                                    norm_format = TagNormalizationFormat.SPACE
+                                elif format_str == 'space_escaped':
+                                    norm_format = TagNormalizationFormat.SPACE_ESCAPED
+                            
+                            tag_group_manager = TagGroupManager(
+                                self.dataset_config.tag_group_dir,
+                                normalization_format=norm_format
+                            )
                             self.dataset_config._tag_group_manager = tag_group_manager
                     keep_n = self.dataset_config.shuffle_keep_first_n if self.dataset_config.shuffle_keep_first_n > 0 else 0
                     token_list = tag_group_manager.shuffle_by_groups(
@@ -523,7 +553,22 @@ class CaptionProcessingDTOMixin:
                             tag_group_manager = self.dataset_config._tag_group_manager
                         else:
                             # Initialize and cache TagGroupManager
-                            tag_group_manager = TagGroupManager(self.dataset_config.tag_group_dir)
+                            # Get normalization format from config
+                            from toolkit.tag_group_utils import TagNormalizationFormat
+                            norm_format = TagNormalizationFormat.SPACE_ESCAPED  # default
+                            if hasattr(self.dataset_config, 'tag_normalization_format'):
+                                format_str = self.dataset_config.tag_normalization_format
+                                if format_str == 'underscore':
+                                    norm_format = TagNormalizationFormat.UNDERSCORE
+                                elif format_str == 'space':
+                                    norm_format = TagNormalizationFormat.SPACE
+                                elif format_str == 'space_escaped':
+                                    norm_format = TagNormalizationFormat.SPACE_ESCAPED
+                            
+                            tag_group_manager = TagGroupManager(
+                                self.dataset_config.tag_group_dir,
+                                normalization_format=norm_format
+                            )
                             self.dataset_config._tag_group_manager = tag_group_manager
                     keep_n = self.dataset_config.shuffle_keep_first_n if self.dataset_config.shuffle_keep_first_n > 0 else 0
                     token_list = tag_group_manager.shuffle_by_groups(
@@ -554,7 +599,22 @@ class CaptionProcessingDTOMixin:
                             tag_group_manager = self.dataset_config._tag_group_manager
                         else:
                             # Initialize and cache TagGroupManager
-                            tag_group_manager = TagGroupManager(self.dataset_config.tag_group_dir)
+                            # Get normalization format from config
+                            from toolkit.tag_group_utils import TagNormalizationFormat
+                            norm_format = TagNormalizationFormat.SPACE_ESCAPED  # default
+                            if hasattr(self.dataset_config, 'tag_normalization_format'):
+                                format_str = self.dataset_config.tag_normalization_format
+                                if format_str == 'underscore':
+                                    norm_format = TagNormalizationFormat.UNDERSCORE
+                                elif format_str == 'space':
+                                    norm_format = TagNormalizationFormat.SPACE
+                                elif format_str == 'space_escaped':
+                                    norm_format = TagNormalizationFormat.SPACE_ESCAPED
+                            
+                            tag_group_manager = TagGroupManager(
+                                self.dataset_config.tag_group_dir,
+                                normalization_format=norm_format
+                            )
                             self.dataset_config._tag_group_manager = tag_group_manager
                     keep_n = self.dataset_config.shuffle_keep_first_n if self.dataset_config.shuffle_keep_first_n > 0 else 0
                     token_list = tag_group_manager.shuffle_by_groups(
