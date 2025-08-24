@@ -218,7 +218,11 @@ export async function GET(
     console.log('Using tensorboard log directory:', logDir);
 
     try {
-      // Find all subdirectories (run directories with timestamps)
+      // Get the job name from configuration
+      const jobName = processConfig?.name || job.name;
+      console.log('Looking for tensorboard directories matching job name:', jobName);
+      
+      // Find directories that match the job name pattern (job_name + timestamp)
       const allDirs = readdirSync(logDir)
         .map(dir => ({
           name: dir,
@@ -227,16 +231,31 @@ export async function GET(
         }))
         .filter(dir => {
           try {
-            return statSync(dir.path).isDirectory();
-          } catch {
+            const isDirectory = statSync(dir.path).isDirectory();
+            const matchesJobName = dir.name.startsWith(jobName);
+            console.log(`Directory ${dir.name}: isDirectory=${isDirectory}, matchesJobName=${matchesJobName}`);
+            return isDirectory && matchesJobName;
+          } catch (error) {
+            console.log(`Error checking directory ${dir.name}:`, error);
             return false;
           }
         })
         .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
-      console.log('Found tensorboard directories:', allDirs.map(d => d.name));
+      console.log('Found matching tensorboard directories:', allDirs.map(d => d.name));
 
       if (allDirs.length === 0) {
+        console.log(`No directories found matching job name "${jobName}" in ${logDir}`);
+        // Also list all directories for debugging
+        const allDirsDebug = readdirSync(logDir).filter(dir => {
+          try {
+            return statSync(join(logDir, dir)).isDirectory();
+          } catch {
+            return false;
+          }
+        });
+        console.log('All available directories:', allDirsDebug);
+        
         return NextResponse.json({ 
           loss: [], 
           learning_rate: [] 
@@ -244,6 +263,7 @@ export async function GET(
       }
 
       // Parse the most recent log directory
+      console.log('Using directory:', allDirs[0].path);
       data = parseTensorboardLog(allDirs[0].path);
       console.log('Parsed tensorboard data:', { 
         lossCount: data.loss.length, 
