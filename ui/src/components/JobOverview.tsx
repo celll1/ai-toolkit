@@ -264,69 +264,70 @@ export default function JobOverview({ job }: JobOverviewProps) {
         {/* Job Information Panel */}
         <div className="col-span-2 bg-gray-900 rounded-xl shadow-lg overflow-hidden border border-gray-800 flex flex-col">
           <div className="bg-gray-800 px-4 py-3 flex items-center justify-between">
-          <h2 className="text-gray-100">
-            <Info className="w-5 h-5 mr-2 -mt-1 text-amber-400 inline-block" /> {job.info}
-          </h2>
-          <span className={`px-3 py-1 rounded-full text-sm ${getStatusColor(job.status)}`}>{job.status}</span>
-        </div>
-
-        <div className="p-4 space-y-6 flex flex-col flex-grow">
-          {/* Progress Bar */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-400">Progress</span>
-              <span className="text-gray-200">
-                Step {job.step} of {totalSteps}
-              </span>
-            </div>
-            <div className="w-full bg-gray-800 rounded-full h-2">
-              <div className="h-2 rounded-full bg-blue-500 transition-all" style={{ width: `${progress}%` }} />
-            </div>
+            <h2 className="text-gray-100">
+              <Info className="w-5 h-5 mr-2 -mt-1 text-amber-400 inline-block" /> {job.info}
+            </h2>
+            <span className={`px-3 py-1 rounded-full text-sm ${getStatusColor(job.status)}`}>{job.status}</span>
           </div>
 
-          {/* Job Info Grid */}
-          <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
-            <div className="flex items-center space-x-4">
-              <HardDrive className="w-5 h-5 text-blue-400" />
-              <div>
-                <p className="text-xs text-gray-400">Job Name</p>
-                <p className="text-sm font-medium text-gray-200">{job.name}</p>
+          <div className="p-4 space-y-6 flex flex-col flex-grow">
+            {/* Progress Bar */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-400">Progress</span>
+                <span className="text-gray-200">
+                  Step {job.step} of {totalSteps}
+                </span>
+              </div>
+              <div className="w-full bg-gray-800 rounded-full h-2">
+                <div className="h-2 rounded-full bg-blue-500 transition-all" style={{ width: `${progress}%` }} />
               </div>
             </div>
 
-            <div className="flex items-center space-x-4">
-              <Cpu className="w-5 h-5 text-purple-400" />
-              <div>
-                <p className="text-xs text-gray-400">Assigned GPUs</p>
-                <p className="text-sm font-medium text-gray-200">GPUs: {job.gpu_ids}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-4">
-              <Gauge className="w-5 h-5 text-green-400" />
-              <div>
-                <p className="text-xs text-gray-400">Speed</p>
-                <p className="text-sm font-medium text-gray-200">{job.speed_string == '' ? '?' : job.speed_string}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Log - Now using flex-grow to fill remaining space */}
-          <div className="bg-gray-950 rounded-lg p-4 relative flex-grow min-h-60">
-            <div
-              ref={logRef}
-              className="text-xs text-gray-300 absolute inset-0 p-4 overflow-y-auto"
-              onScroll={handleScroll}
-            >
-              {statusLog === 'loading' && 'Loading log...'}
-              {statusLog === 'error' && 'Error loading log'}
-              {['success', 'refreshing'].includes(statusLog) && (
+            {/* Job Info Grid */}
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
+              <div className="flex items-center space-x-4">
+                <HardDrive className="w-5 h-5 text-blue-400" />
                 <div>
-                  {logLines.map((line, index) => {
-                    return <pre key={index}>{line}</pre>;
-                  })}
+                  <p className="text-xs text-gray-400">Job Name</p>
+                  <p className="text-sm font-medium text-gray-200">{job.name}</p>
                 </div>
-              )}
+              </div>
+
+              <div className="flex items-center space-x-4">
+                <Cpu className="w-5 h-5 text-purple-400" />
+                <div>
+                  <p className="text-xs text-gray-400">Assigned GPUs</p>
+                  <p className="text-sm font-medium text-gray-200">GPUs: {job.gpu_ids}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-4">
+                <Gauge className="w-5 h-5 text-green-400" />
+                <div>
+                  <p className="text-xs text-gray-400">Speed</p>
+                  <p className="text-sm font-medium text-gray-200">{job.speed_string == '' ? '?' : job.speed_string}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Log - Now using flex-grow to fill remaining space */}
+            <div className="bg-gray-950 rounded-lg p-4 relative flex-grow min-h-60">
+              <div
+                ref={logRef}
+                className="text-xs text-gray-300 absolute inset-0 p-4 overflow-y-auto"
+                onScroll={handleScroll}
+              >
+                {statusLog === 'loading' && 'Loading log...'}
+                {statusLog === 'error' && 'Error loading log'}
+                {['success', 'refreshing'].includes(statusLog) && (
+                  <div>
+                    {logLines.map((line, index) => {
+                      return <pre key={index}>{line}</pre>;
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
