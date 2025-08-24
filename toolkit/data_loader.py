@@ -518,6 +518,17 @@ class AiToolkitDataset(LatentCachingMixin, ControlCachingMixin, CLIPCachingMixin
         else:
             print_acc(f"  -  Found {len(self.file_list)} images")
             assert len(self.file_list) > 0, f"no images found in {self.dataset_path}"
+        
+        # Apply sampling if sample_size is specified
+        if self.dataset_config.sample_size is not None and self.dataset_config.sample_size > 0:
+            original_size = len(self.file_list)
+            if self.dataset_config.sample_size < original_size:
+                # Randomly sample the specified number of images
+                random.seed(42)  # Use fixed seed for reproducibility
+                self.file_list = random.sample(self.file_list, self.dataset_config.sample_size)
+                print_acc(f"  -  Sampled {self.dataset_config.sample_size} from {original_size} {'videos' if self.is_video else 'images'}")
+            else:
+                print_acc(f"  -  Sample size ({self.dataset_config.sample_size}) >= dataset size ({original_size}), using all {'videos' if self.is_video else 'images'}")
 
         # handle x axis flips
         if self.dataset_config.flip_x:

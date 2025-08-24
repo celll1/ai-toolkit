@@ -8,6 +8,7 @@ import { TextInput, SelectInput, Checkbox, FormGroup, NumberInput } from '@/comp
 import Card from '@/components/Card';
 import { X } from 'lucide-react';
 import AddSingleImageModal, { openAddImageModal } from '@/components/AddSingleImageModal';
+import useDatasetList from '@/hooks/useDatasetList';
 
 type Props = {
   jobConfig: JobConfig;
@@ -39,6 +40,9 @@ export default function SimpleJob({
   }, [jobConfig.config.process[0].model.arch]);
 
   const isVideoModel = !!(modelArch?.group === 'video');
+  
+  // Get dataset information including image counts
+  const { datasets: datasetInfo } = useDatasetList();
 
   const numTopCards = useMemo(() => {
     let count = 4; // job settings, model config, target config, save config
@@ -596,6 +600,24 @@ export default function SimpleJob({
                         value={dataset.folder_path}
                         onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].folder_path`)}
                         options={datasetOptions}
+                      />
+                      {/* Display image count for selected dataset */}
+                      {dataset.folder_path && datasetInfo.length > 0 && (
+                        <div className="text-xs text-gray-400 mt-1">
+                          {(() => {
+                            const info = datasetInfo.find(d => d.name === dataset.folder_path);
+                            return info ? `Images: ${info.imageCount}` : 'Images: Loading...';
+                          })()}
+                        </div>
+                      )}
+                      <NumberInput
+                        label="Sample Size (leave empty for all)"
+                        className="pt-2"
+                        value={dataset.sample_size || ''}
+                        onChange={value => setJobConfig(value === '' ? undefined : Number(value), `config.process[0].datasets[${i}].sample_size`)}
+                        placeholder="eg. 1000"
+                        min={1}
+                        docKey="datasets.sample_size"
                       />
                       {modelArch?.additionalSections?.includes('datasets.control_path') && (
                         <SelectInput

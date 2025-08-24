@@ -816,6 +816,7 @@ class DatasetConfig:
         self.tag_group_dir: str = kwargs.get('tag_group_dir', 'taggroup')  # directory containing tag group JSON files
         self.exclude_person_count_tags: bool = kwargs.get('exclude_person_count_tags', False)  # exclude person count tags from General group shuffling
         self.shuffle_groups_together: bool = kwargs.get('shuffle_groups_together', False)  # shuffle all selected groups together vs within each group
+        self.sample_size: int = kwargs.get('sample_size', None)  # Number of images to sample from dataset (None = use all)
         self.caption_dropout_rate: float = float(kwargs.get('caption_dropout_rate', 0.0))
         self.keep_tokens: int = kwargs.get('keep_tokens', 0)  # #of first tokens to always keep unless caption dropped
         self.flip_x: bool = kwargs.get('flip_x', False)

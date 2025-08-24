@@ -230,6 +230,27 @@ const docs: { [key: string]: ConfigDoc } = {
       </>
     ),
   },
+  'datasets.sample_size': {
+    title: 'Dataset Sample Size',
+    description: (
+      <>
+        <p>
+          Limit the number of images to use from this dataset during training. 
+          This is useful when you have a large dataset but want to train on a subset.
+        </p>
+        <ul className="list-disc ml-4 mt-2">
+          <li>Leave empty to use all images in the dataset</li>
+          <li>Images are randomly sampled once at the start of training</li>
+          <li>The same sampled subset is used for all epochs</li>
+          <li>If the value exceeds the dataset size, all images will be used</li>
+        </ul>
+        <p className="mt-2">
+          <strong>Example:</strong> If your dataset has 10,000 images but you set sample_size to 1000,
+          only 1000 randomly selected images will be used throughout the entire training run.
+        </p>
+      </>
+    ),
+  },
   'datasets.shuffle_groups_together': {
     title: 'Shuffle Groups Together',
     description: (

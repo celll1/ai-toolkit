@@ -91,6 +91,7 @@ export interface DatasetConfig {
   num_frames: number;
   shrink_video_to_frames: boolean;
   do_i2v: boolean;
+  sample_size?: number;  // Number of images to sample from this dataset
 }
 
 export interface EMAConfig {
