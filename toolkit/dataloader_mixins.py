@@ -9,6 +9,24 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, List, Dict, Union
 import traceback
 
+# Global TagGroupManager cache to avoid duplicate JSON loading across datasets
+_TAG_GROUP_MANAGER_CACHE = {}
+
+def get_or_create_tag_group_manager(tag_group_dir: str, normalization_format):
+    """Get or create TagGroupManager from global cache"""
+    from toolkit.tag_group_utils import TagGroupManager
+    
+    cache_key = (tag_group_dir, normalization_format.value)
+    
+    if cache_key not in _TAG_GROUP_MANAGER_CACHE:
+        print(f"Loading tag groups from {tag_group_dir} (format: {normalization_format.value})")
+        _TAG_GROUP_MANAGER_CACHE[cache_key] = TagGroupManager(
+            tag_group_dir, 
+            normalization_format
+        )
+    
+    return _TAG_GROUP_MANAGER_CACHE[cache_key]
+
 import cv2
 import numpy as np
 import torch
@@ -373,6 +391,7 @@ class CaptionProcessingDTOMixin:
             raw_caption = self.raw_caption
         if raw_caption is None:
             raw_caption = ''
+        
         # handle dropout
         if self.dataset_config.caption_dropout_rate > 0 and not short_caption:
             # get a random float form 0 to 1
@@ -381,7 +400,15 @@ class CaptionProcessingDTOMixin:
                 # drop the caption
                 return ''
 
-        # get tokens
+        # Early return for non-shuffle cases to avoid unnecessary processing
+        if not self.dataset_config.shuffle_tokens:
+            # Minimal processing for non-shuffle cases
+            if not raw_caption:
+                return ''
+            clean_tokens = [x.strip() for x in raw_caption.split(',') if x.strip()]
+            return ', '.join(clean_tokens)
+
+        # get tokens (only for shuffle cases)
         token_list = raw_caption.split(',')
         # trim whitespace
         token_list = [x.strip() for x in token_list]
@@ -424,9 +451,8 @@ class CaptionProcessingDTOMixin:
                 rng = random.Random(seed)
                 
                 if self.dataset_config.shuffle_mode == 'tag_group' and self.dataset_config.shuffle_tag_groups:
-                    # Tag group-based shuffle
+                    # Tag group-based shuffle using global cache
                     if tag_group_manager is None:
-                        # Initialize TagGroupManager if not provided - cache it for future use
                         # Get normalization format from config
                         from toolkit.tag_group_utils import TagNormalizationFormat
                         norm_format = TagNormalizationFormat.SPACE_ESCAPED  # default
@@ -439,15 +465,11 @@ class CaptionProcessingDTOMixin:
                             elif format_str == 'space_escaped':
                                 norm_format = TagNormalizationFormat.SPACE_ESCAPED
                         
-                        tag_group_manager = TagGroupManager(
+                        # Use global cache instead of per-dataset cache
+                        tag_group_manager = get_or_create_tag_group_manager(
                             self.dataset_config.tag_group_dir,
-                            normalization_format=norm_format
+                            norm_format
                         )
-                        # Store in dataset config to avoid re-initialization
-                        self.dataset_config._tag_group_manager = tag_group_manager
-                    elif hasattr(self.dataset_config, '_tag_group_manager'):
-                        # Reuse cached TagGroupManager
-                        tag_group_manager = self.dataset_config._tag_group_manager
                     keep_n = self.dataset_config.shuffle_keep_first_n if self.dataset_config.shuffle_keep_first_n > 0 else 0
                     token_list = tag_group_manager.shuffle_by_groups(
                         token_list, 
@@ -476,7 +498,6 @@ class CaptionProcessingDTOMixin:
                         if hasattr(self.dataset_config, '_tag_group_manager'):
                             tag_group_manager = self.dataset_config._tag_group_manager
                         else:
-                            # Initialize and cache TagGroupManager
                             # Get normalization format from config
                             from toolkit.tag_group_utils import TagNormalizationFormat
                             norm_format = TagNormalizationFormat.SPACE_ESCAPED  # default
@@ -489,11 +510,11 @@ class CaptionProcessingDTOMixin:
                                 elif format_str == 'space_escaped':
                                     norm_format = TagNormalizationFormat.SPACE_ESCAPED
                             
-                            tag_group_manager = TagGroupManager(
+                            # Use global cache instead of per-dataset cache
+                            tag_group_manager = get_or_create_tag_group_manager(
                                 self.dataset_config.tag_group_dir,
-                                normalization_format=norm_format
+                                norm_format
                             )
-                            self.dataset_config._tag_group_manager = tag_group_manager
                     keep_n = self.dataset_config.shuffle_keep_first_n if self.dataset_config.shuffle_keep_first_n > 0 else 0
                     token_list = tag_group_manager.shuffle_by_groups(
                         token_list,
@@ -552,7 +573,6 @@ class CaptionProcessingDTOMixin:
                         if hasattr(self.dataset_config, '_tag_group_manager'):
                             tag_group_manager = self.dataset_config._tag_group_manager
                         else:
-                            # Initialize and cache TagGroupManager
                             # Get normalization format from config
                             from toolkit.tag_group_utils import TagNormalizationFormat
                             norm_format = TagNormalizationFormat.SPACE_ESCAPED  # default
@@ -565,11 +585,11 @@ class CaptionProcessingDTOMixin:
                                 elif format_str == 'space_escaped':
                                     norm_format = TagNormalizationFormat.SPACE_ESCAPED
                             
-                            tag_group_manager = TagGroupManager(
+                            # Use global cache instead of per-dataset cache
+                            tag_group_manager = get_or_create_tag_group_manager(
                                 self.dataset_config.tag_group_dir,
-                                normalization_format=norm_format
+                                norm_format
                             )
-                            self.dataset_config._tag_group_manager = tag_group_manager
                     keep_n = self.dataset_config.shuffle_keep_first_n if self.dataset_config.shuffle_keep_first_n > 0 else 0
                     token_list = tag_group_manager.shuffle_by_groups(
                         token_list,
@@ -598,7 +618,6 @@ class CaptionProcessingDTOMixin:
                         if hasattr(self.dataset_config, '_tag_group_manager'):
                             tag_group_manager = self.dataset_config._tag_group_manager
                         else:
-                            # Initialize and cache TagGroupManager
                             # Get normalization format from config
                             from toolkit.tag_group_utils import TagNormalizationFormat
                             norm_format = TagNormalizationFormat.SPACE_ESCAPED  # default
@@ -611,11 +630,11 @@ class CaptionProcessingDTOMixin:
                                 elif format_str == 'space_escaped':
                                     norm_format = TagNormalizationFormat.SPACE_ESCAPED
                             
-                            tag_group_manager = TagGroupManager(
+                            # Use global cache instead of per-dataset cache
+                            tag_group_manager = get_or_create_tag_group_manager(
                                 self.dataset_config.tag_group_dir,
-                                normalization_format=norm_format
+                                norm_format
                             )
-                            self.dataset_config._tag_group_manager = tag_group_manager
                     keep_n = self.dataset_config.shuffle_keep_first_n if self.dataset_config.shuffle_keep_first_n > 0 else 0
                     token_list = tag_group_manager.shuffle_by_groups(
                         token_list,
