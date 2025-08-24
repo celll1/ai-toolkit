@@ -605,8 +605,10 @@ export default function SimpleJob({
                       {dataset.folder_path && datasetInfo.length > 0 && (
                         <div className="text-xs text-gray-400 mt-1">
                           {(() => {
-                            const info = datasetInfo.find(d => d.name === dataset.folder_path);
-                            return info ? `Images: ${info.imageCount}` : 'Images: Loading...';
+                            // Extract dataset name from full path
+                            const datasetName = dataset.folder_path.split(/[/\\]/).pop();
+                            const info = datasetInfo.find(d => d.name === datasetName);
+                            return info ? `Images: ${info.imageCount}` : 'Images: 0';
                           })()}
                         </div>
                       )}
