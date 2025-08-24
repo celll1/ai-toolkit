@@ -2,10 +2,13 @@ import { Job } from '@prisma/client';
 import useGPUInfo from '@/hooks/useGPUInfo';
 import GPUWidget from '@/components/GPUWidget';
 import FilesWidget from '@/components/FilesWidget';
+import LossChart from '@/components/LossChart';
+import LearningRateChart from '@/components/LearningRateChart';
 import { getTotalSteps } from '@/utils/jobs';
 import { Cpu, HardDrive, Info, Gauge, Settings, Database, Target, Save, Zap } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import useJobLog from '@/hooks/useJobLog';
+import useTensorboardData from '@/hooks/useTensorboardData';
 import { JobConfig } from '@/types';
 
 interface JobOverviewProps {
@@ -20,6 +23,7 @@ export default function JobOverview({ job }: JobOverviewProps) {
   const [isScrolledToBottom, setIsScrolledToBottom] = useState(true);
 
   const { gpuList, isGPUInfoLoaded } = useGPUInfo(gpuIds, 5000);
+  const { data: tensorboardData, isLoading: isTensorboardLoading } = useTensorboardData(job.id, 15000);
   const totalSteps = getTotalSteps(job);
   const progress = (job.step / totalSteps) * 100;
   const isStopping = job.stop && job.status === 'running';
@@ -204,7 +208,7 @@ export default function JobOverview({ job }: JobOverviewProps) {
 
       {/* Additional Configuration Panels */}
       {processConfig && (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
           {/* Save Configuration */}
           <div className="bg-gray-900 rounded-xl shadow-lg border border-gray-800 p-4">
             <div className="flex items-center mb-3">
@@ -257,6 +261,18 @@ export default function JobOverview({ job }: JobOverviewProps) {
               </div>
             </div>
           </div>
+
+          {/* Loss Chart */}
+          <LossChart 
+            data={tensorboardData.loss} 
+            isLoading={isTensorboardLoading} 
+          />
+
+          {/* Learning Rate Chart */}
+          <LearningRateChart 
+            data={tensorboardData.learning_rate} 
+            isLoading={isTensorboardLoading} 
+          />
         </div>
       )}
 
