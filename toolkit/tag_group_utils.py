@@ -1,8 +1,9 @@
 import json
 import os
 import re
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Optional
 from pathlib import Path
+from functools import lru_cache
 
 # Person count tag patterns
 PERSON_COUNT_TAG_PATTERNS = [
@@ -25,6 +26,8 @@ class TagGroupManager:
         self.tag_groups: Dict[str, Set[str]] = {}
         self.tag_to_group: Dict[str, str] = {}
         self._loaded = False
+        # Person count tagのキャッシュを追加
+        self._person_count_cache: Dict[str, bool] = {}
         self.load_tag_groups()
     
     def load_tag_groups(self):
@@ -37,38 +40,42 @@ class TagGroupManager:
             self._loaded = True
             return
         
-        for json_file in base_path.glob('*.json'):
+        # 一括でJSONファイルを読み込む
+        json_files = list(base_path.glob('*.json'))
+        for json_file in json_files:
             group_name = json_file.stem
             try:
                 with open(json_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     # Store tags as a set for faster lookup
-                    self.tag_groups[group_name] = set(data.keys())
-                    # Map each tag to its group
-                    for tag in data.keys():
-                        self.tag_to_group[tag] = group_name
+                    tag_set = set(data.keys())
+                    self.tag_groups[group_name] = tag_set
+                    # Map each tag to its group (dictの更新を一括で行う)
+                    self.tag_to_group.update({tag: group_name for tag in tag_set})
             except Exception as e:
                 print(f"Warning: Failed to load tag group {json_file}: {e}")
         
         self._loaded = True
     
+    @lru_cache(maxsize=1024)  # よく使われるタグをキャッシュ
     def get_tag_group(self, tag: str) -> str:
         """Get the group name for a given tag, returns 'General' if not found in any group"""
         # Strip whitespace for matching
         tag = tag.strip()
-        # If tag is found in our mapping, return its group
-        if tag in self.tag_to_group:
-            return self.tag_to_group[tag]
-        # Default to 'General' for unmatched tags
-        return 'General'
+        return self.tag_to_group.get(tag, 'General')
     
     def is_person_count_tag(self, tag: str) -> bool:
         """Check if a tag is a person count related tag"""
         tag = tag.strip()
-        for pattern in PERSON_COUNT_TAG_PATTERNS:
-            if pattern.match(tag):
-                return True
-        return False
+        
+        # キャッシュをチェック
+        if tag in self._person_count_cache:
+            return self._person_count_cache[tag]
+        
+        # キャッシュにない場合は計算して保存
+        result = any(pattern.match(tag) for pattern in PERSON_COUNT_TAG_PATTERNS)
+        self._person_count_cache[tag] = result
+        return result
     
     def classify_tokens(self, tokens: List[str]) -> Dict[str, List[Tuple[int, str]]]:
         """
@@ -90,14 +97,13 @@ class TagGroupManager:
                          shuffle_together: bool = False, rng=None) -> List[str]:
         """
         Shuffle only tokens belonging to specified groups while keeping others in place.
-        Can be combined with keep_first_n to also keep the first n tokens fixed.
         
         Args:
             tokens: List of tokens to process
-            groups_to_shuffle: List of group names to shuffle (e.g., ['Character', 'General'])
-            keep_first_n: Number of first tokens to keep in place (works with group shuffle)
-            exclude_person_count: If True, exclude person count tags from shuffling (General group only)
-            shuffle_together: If True, shuffle all selected groups together; if False, shuffle within each group
+            groups_to_shuffle: List of group names to shuffle
+            keep_first_n: Number of first tokens to keep in place
+            exclude_person_count: If True, exclude person count tags from shuffling
+            shuffle_together: If True, shuffle all selected groups together
             rng: Random number generator to use for shuffling
         
         Returns:
@@ -107,66 +113,76 @@ class TagGroupManager:
         if rng is None:
             rng = random.Random()
         
-        # If no groups specified, return original tokens
-        if not groups_to_shuffle:
+        # If no groups specified or tokens, return original
+        if not groups_to_shuffle or not tokens:
             return tokens
         
-        # Create a copy to work with
+        # 効率化: 必要な場合のみコピーを作成
+        result = None  # 遅延初期化
+        
+        # グループのセットを作成（高速な存在チェックのため）
+        groups_to_shuffle_set = set(groups_to_shuffle)
+        
+        # 分類用の変数
+        classified = {} if not shuffle_together else None
+        all_shuffleable = [] if shuffle_together else None
+        
+        # 開始インデックスを計算
+        start_idx = max(0, keep_first_n)
+        
+        # トークンを一度だけループ
+        for idx in range(start_idx, len(tokens)):
+            token = tokens[idx].strip()
+            if not token:
+                continue
+                
+            group = self.get_tag_group(token)
+            if group not in groups_to_shuffle_set:
+                continue
+                
+            # Person count tagのチェック（必要な場合のみ）
+            if exclude_person_count and group == 'General' and self.is_person_count_tag(token):
+                continue
+            
+            # シャッフル対象として記録
+            if shuffle_together:
+                all_shuffleable.append((idx, token))
+            else:
+                if group not in classified:
+                    classified[group] = []
+                classified[group].append((idx, token))
+        
+        # シャッフルが必要ない場合は元のリストを返す
+        if shuffle_together and len(all_shuffleable) <= 1:
+            return tokens
+        elif not shuffle_together and all(len(classified.get(g, [])) <= 1 for g in groups_to_shuffle_set):
+            return tokens
+        
+        # ここで初めてコピーを作成
         result = tokens.copy()
         
-        # Classify tokens by group, but exclude the first n if specified
-        start_idx = keep_first_n if keep_first_n > 0 else 0
-        tokens_to_classify = tokens[start_idx:]
-        
-        # Build index mapping for tokens that can be shuffled
-        classified = {}
-        all_shuffleable_tokens = []  # For shuffle_together mode
-        
-        for idx, token in enumerate(tokens_to_classify):
-            actual_idx = idx + start_idx  # Adjust for keep_first_n offset
-            token = token.strip()
-            if token:
-                group = self.get_tag_group(token)
-                if group in groups_to_shuffle:
-                    # Check if we should exclude person count tags
-                    if exclude_person_count and group == 'General' and self.is_person_count_tag(token):
-                        continue  # Skip this token from shuffling
-                    
-                    if group not in classified:
-                        classified[group] = []
-                    classified[group].append((actual_idx, token))
-                    all_shuffleable_tokens.append((actual_idx, token))
-        
         if shuffle_together:
-            # Shuffle all selected groups together
-            if len(all_shuffleable_tokens) > 1:
-                # Extract indices and tokens
-                original_indices = [idx for idx, _ in all_shuffleable_tokens]
-                tokens_to_shuffle = [token for _, token in all_shuffleable_tokens]
-                
-                # Shuffle the tokens
-                shuffled_tokens = tokens_to_shuffle.copy()
-                rng.shuffle(shuffled_tokens)
-                
-                # Put shuffled tokens back in their positions
-                for orig_idx, shuffled_token in zip(original_indices, shuffled_tokens):
-                    result[orig_idx] = shuffled_token
+            # すべてのグループを一緒にシャッフル
+            if all_shuffleable:
+                indices, values = zip(*all_shuffleable)
+                shuffled_values = list(values)
+                rng.shuffle(shuffled_values)
+                for idx, val in zip(indices, shuffled_values):
+                    result[idx] = val
         else:
-            # Shuffle within each group separately
-            for group in groups_to_shuffle:
-                if group in classified:
-                    group_indices_tokens = classified[group]
-                    if len(group_indices_tokens) > 1:
-                        # Extract just the tokens for shuffling
-                        original_indices = [idx for idx, _ in group_indices_tokens]
-                        tokens_to_shuffle = [token for _, token in group_indices_tokens]
-                        
-                        # Shuffle the tokens
-                        shuffled_tokens = tokens_to_shuffle.copy()
-                        rng.shuffle(shuffled_tokens)
-                        
-                        # Put shuffled tokens back in their group's positions
-                        for orig_idx, shuffled_token in zip(original_indices, shuffled_tokens):
-                            result[orig_idx] = shuffled_token
+            # 各グループごとにシャッフル
+            for group in groups_to_shuffle_set:
+                if group in classified and len(classified[group]) > 1:
+                    group_items = classified[group]
+                    indices, values = zip(*group_items)
+                    shuffled_values = list(values)
+                    rng.shuffle(shuffled_values)
+                    for idx, val in zip(indices, shuffled_values):
+                        result[idx] = val
         
         return result
+    
+    def clear_cache(self):
+        """キャッシュをクリアする（メモリ使用量が気になる場合）"""
+        self._person_count_cache.clear()
+        self.get_tag_group.cache_clear()
