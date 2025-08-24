@@ -54,17 +54,17 @@ function parseTensorboardLog(logPath: string): TensorboardData {
     const buffer = readFileSync(eventFile);
     console.log('Event file size:', buffer.length, 'bytes');
     
-    // Simplified TFRecord parsing - TensorBoard files use TFRecord format
-    // TFRecord format: [length (8 bytes)][masked_crc (4 bytes)][data][data_crc (4 bytes)]
+    // TFRecord format parsing with improved protobuf handling
+    // TFRecord: [length (8 bytes LE)][masked_crc (4 bytes)][data][data_crc (4 bytes)]
     let offset = 0;
     let recordCount = 0;
     
-    while (offset < buffer.length - 16) { // Need at least 16 bytes for TFRecord header + footer
+    while (offset < buffer.length - 16) {
       try {
         // Read record length (8 bytes, little endian)
         const length = Number(buffer.readBigUInt64LE(offset));
         
-        if (length <= 0 || length > buffer.length - offset - 16) {
+        if (length <= 0 || length > 100000 || offset + 16 + length > buffer.length) {
           offset += 1;
           continue;
         }
@@ -79,76 +79,87 @@ function parseTensorboardLog(logPath: string): TensorboardData {
         
         recordCount++;
         
-        // Try to parse as protobuf Event message
-        // This is a simplified approach - we look for common patterns
-        
-        // Convert to string for pattern matching (this works for simple scalar values)
-        const dataStr = eventData.toString('binary');
-        
-        // Look for step numbers and scalar values using regex patterns
-        // This is less precise but more robust than proper protobuf parsing
-        
-        // Try to extract step number
-        const stepMatches = dataStr.match(/\x10([\x00-\x7f]+)/); // Field 2, varint
+        // Parse protobuf Event message more carefully
+        let wallTime = 0;
         let step: number | null = null;
         
-        if (stepMatches) {
-          // Decode varint manually (simplified)
-          const varintBytes = stepMatches[1];
-          let stepVal = 0;
-          for (let i = 0; i < varintBytes.length && i < 4; i++) {
-            const byte = varintBytes.charCodeAt(i);
-            if (byte & 0x80) {
-              stepVal |= (byte & 0x7f) << (i * 7);
-            } else {
-              stepVal |= byte << (i * 7);
-              break;
+        // Parse protobuf fields
+        let pos = 0;
+        while (pos < eventData.length - 1) {
+          const tag = eventData[pos];
+          pos++;
+          
+          // Field 1: wall_time (double, wire type 1)
+          if (tag === 0x09) {
+            if (pos + 8 <= eventData.length) {
+              const view = new DataView(eventData.buffer, eventData.byteOffset + pos, 8);
+              wallTime = view.getFloat64(0, true);
+              pos += 8;
+            } else break;
+          }
+          // Field 2: step (int64, wire type 0)
+          else if (tag === 0x10) {
+            let stepVal = 0;
+            let shift = 0;
+            while (pos < eventData.length) {
+              const byte = eventData[pos++];
+              stepVal |= (byte & 0x7f) << shift;
+              if ((byte & 0x80) === 0) break;
+              shift += 7;
+              if (shift >= 64) break;
+            }
+            step = stepVal;
+          }
+          // Field 5: summary (message, wire type 2)
+          else if (tag === 0x2a) {
+            if (pos >= eventData.length) break;
+            
+            let summaryLength = 0;
+            let shift = 0;
+            while (pos < eventData.length) {
+              const byte = eventData[pos++];
+              summaryLength |= (byte & 0x7f) << shift;
+              if ((byte & 0x80) === 0) break;
+              shift += 7;
+            }
+            
+            if (pos + summaryLength <= eventData.length) {
+              const summaryData = eventData.subarray(pos, pos + summaryLength);
+              pos += summaryLength;
+              
+              // Parse Summary message
+              parseSummary(summaryData, step, wallTime, data);
             }
           }
-          step = stepVal;
-        }
-        
-        // Look for tag names and scalar values
-        const tagMatches = [...dataStr.matchAll(/\x0a([\x01-\x1f])([\x20-\x7e]+)/g)]; // String fields
-        const scalarMatches = [...dataStr.matchAll(/\x15(.{4})/g)]; // Float32 fields
-        
-        for (let i = 0; i < tagMatches.length && i < scalarMatches.length; i++) {
-          const tagMatch = tagMatches[i];
-          const scalarMatch = scalarMatches[i];
-          
-          if (tagMatch && scalarMatch && step !== null) {
-            const tagName = tagMatch[2];
-            
-            // Parse float32 value
-            const floatBytes = new Uint8Array(4);
-            for (let j = 0; j < 4; j++) {
-              floatBytes[j] = scalarMatch[1].charCodeAt(j);
-            }
-            const view = new DataView(floatBytes.buffer);
-            const scalarValue = view.getFloat32(0, true); // little endian
-            
-            const wallTime = Date.now() / 1000;
-            
-            if (tagName.toLowerCase().includes('loss')) {
-              data.loss.push({
-                step,
-                value: scalarValue,
-                wall_time: wallTime
-              });
-              console.log(`Found loss: step=${step}, value=${scalarValue}`);
-            } else if (tagName.toLowerCase().includes('lr') || tagName.toLowerCase().includes('learning_rate')) {
-              data.learning_rate.push({
-                step,
-                value: scalarValue,
-                wall_time: wallTime
-              });
-              console.log(`Found LR: step=${step}, value=${scalarValue}`);
+          // Skip unknown fields
+          else {
+            const wireType = tag & 0x07;
+            if (wireType === 0) { // Varint
+              while (pos < eventData.length && (eventData[pos] & 0x80)) pos++;
+              if (pos < eventData.length) pos++;
+            } else if (wireType === 1) { // 64-bit
+              pos += 8;
+            } else if (wireType === 2) { // Length-delimited
+              if (pos >= eventData.length) break;
+              let len = 0;
+              let shift = 0;
+              while (pos < eventData.length) {
+                const byte = eventData[pos++];
+                len |= (byte & 0x7f) << shift;
+                if ((byte & 0x80) === 0) break;
+                shift += 7;
+              }
+              pos += len;
+            } else if (wireType === 5) { // 32-bit
+              pos += 4;
+            } else {
+              break;
             }
           }
         }
         
       } catch (e) {
-        // Skip this record if parsing fails
+        console.error('Error parsing TFRecord at offset', offset, ':', e);
         offset += 1;
       }
     }
@@ -176,6 +187,141 @@ function parseTensorboardLog(logPath: string): TensorboardData {
   }
 
   return data;
+}
+
+function parseSummary(summaryData: Uint8Array, step: number | null, wallTime: number, data: TensorboardData) {
+  let pos = 0;
+  
+  while (pos < summaryData.length - 1) {
+    const tag = summaryData[pos];
+    pos++;
+    
+    // Field 1: value (repeated Value, wire type 2)
+    if (tag === 0x0a) {
+      if (pos >= summaryData.length) break;
+      
+      let valueLength = 0;
+      let shift = 0;
+      while (pos < summaryData.length) {
+        const byte = summaryData[pos++];
+        valueLength |= (byte & 0x7f) << shift;
+        if ((byte & 0x80) === 0) break;
+        shift += 7;
+      }
+      
+      if (pos + valueLength <= summaryData.length) {
+        const valueData = summaryData.subarray(pos, pos + valueLength);
+        pos += valueLength;
+        
+        parseValue(valueData, step, wallTime, data);
+      }
+    }
+    // Skip other fields
+    else {
+      const wireType = tag & 0x07;
+      if (wireType === 0) { // Varint
+        while (pos < summaryData.length && (summaryData[pos] & 0x80)) pos++;
+        if (pos < summaryData.length) pos++;
+      } else if (wireType === 2) { // Length-delimited
+        if (pos >= summaryData.length) break;
+        let len = 0;
+        let shift = 0;
+        while (pos < summaryData.length) {
+          const byte = summaryData[pos++];
+          len |= (byte & 0x7f) << shift;
+          if ((byte & 0x80) === 0) break;
+          shift += 7;
+        }
+        pos += len;
+      } else {
+        break;
+      }
+    }
+  }
+}
+
+function parseValue(valueData: Uint8Array, step: number | null, wallTime: number, data: TensorboardData) {
+  let pos = 0;
+  let tagName = '';
+  let scalarValue: number | null = null;
+  
+  while (pos < valueData.length - 1) {
+    const tag = valueData[pos];
+    pos++;
+    
+    // Field 1: tag (string, wire type 2)
+    if (tag === 0x0a) {
+      if (pos >= valueData.length) break;
+      
+      let tagLength = 0;
+      let shift = 0;
+      while (pos < valueData.length) {
+        const byte = valueData[pos++];
+        tagLength |= (byte & 0x7f) << shift;
+        if ((byte & 0x80) === 0) break;
+        shift += 7;
+      }
+      
+      if (pos + tagLength <= valueData.length) {
+        tagName = new TextDecoder().decode(valueData.subarray(pos, pos + tagLength));
+        pos += tagLength;
+      }
+    }
+    // Field 2: simple_value (float, wire type 5)
+    else if (tag === 0x15) {
+      if (pos + 4 <= valueData.length) {
+        const view = new DataView(valueData.buffer, valueData.byteOffset + pos, 4);
+        scalarValue = view.getFloat32(0, true);
+        pos += 4;
+      }
+    }
+    // Skip other fields
+    else {
+      const wireType = tag & 0x07;
+      if (wireType === 0) { // Varint
+        while (pos < valueData.length && (valueData[pos] & 0x80)) pos++;
+        if (pos < valueData.length) pos++;
+      } else if (wireType === 1) { // 64-bit
+        pos += 8;
+      } else if (wireType === 2) { // Length-delimited
+        if (pos >= valueData.length) break;
+        let len = 0;
+        let shift = 0;
+        while (pos < valueData.length) {
+          const byte = valueData[pos++];
+          len |= (byte & 0x7f) << shift;
+          if ((byte & 0x80) === 0) break;
+          shift += 7;
+        }
+        pos += len;
+      } else if (wireType === 5) { // 32-bit
+        pos += 4;
+      } else {
+        break;
+      }
+    }
+  }
+  
+  // Store the parsed data
+  if (step !== null && scalarValue !== null && tagName) {
+    if (tagName.toLowerCase().includes('loss')) {
+      data.loss.push({
+        step,
+        value: scalarValue,
+        wall_time: wallTime || Date.now() / 1000
+      });
+      console.log(`Found loss: tag="${tagName}", step=${step}, value=${scalarValue}`);
+    } else if (tagName.toLowerCase().includes('lr') || tagName.toLowerCase().includes('learning_rate')) {
+      data.learning_rate.push({
+        step,
+        value: scalarValue,
+        wall_time: wallTime || Date.now() / 1000
+      });
+      console.log(`Found LR: tag="${tagName}", step=${step}, value=${scalarValue}`);
+    } else {
+      console.log(`Found other metric: tag="${tagName}", step=${step}, value=${scalarValue}`);
+    }
+  }
 }
 
 export async function GET(
