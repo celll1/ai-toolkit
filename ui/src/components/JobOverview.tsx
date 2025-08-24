@@ -264,7 +264,8 @@ export default function JobOverview({ job }: JobOverviewProps) {
 
           {/* Loss Chart */}
           <LossChart 
-            data={tensorboardData.loss} 
+            data={tensorboardData.loss}
+            smoothData={tensorboardData.smooth_loss}
             isLoading={isTensorboardLoading} 
           />
 

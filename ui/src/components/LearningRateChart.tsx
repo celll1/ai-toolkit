@@ -17,6 +17,14 @@ export default function LearningRateChart({ data, isLoading = false }: LearningR
     step: point.step,
     lr: point.value
   }));
+  
+  // Format Y-axis tick labels to scientific notation
+  const formatYAxis = (value: number) => {
+    if (value === 0) return '0';
+    const exponent = Math.floor(Math.log10(Math.abs(value)));
+    const mantissa = value / Math.pow(10, exponent);
+    return `${mantissa.toFixed(2)}e${exponent >= 0 ? '+' : ''}${exponent}`;
+  };
 
   return (
     <div className="bg-gray-900 rounded-xl shadow-lg border border-gray-800 p-4">
@@ -48,6 +56,7 @@ export default function LearningRateChart({ data, isLoading = false }: LearningR
                 tickLine={false}
                 axisLine={false}
                 domain={['dataMin', 'dataMax']}
+                tickFormatter={formatYAxis}
               />
               <Tooltip 
                 contentStyle={{
@@ -56,7 +65,7 @@ export default function LearningRateChart({ data, isLoading = false }: LearningR
                   borderRadius: '8px',
                   color: '#F3F4F6'
                 }}
-                formatter={(value: number) => [value.toExponential(3), 'Learning Rate']}
+                formatter={(value: number) => [value.toExponential(2), 'Learning Rate']}
                 labelFormatter={(step: number) => `Step: ${step}`}
               />
               <Line 
@@ -78,7 +87,7 @@ export default function LearningRateChart({ data, isLoading = false }: LearningR
       
       {chartData.length > 0 && (
         <div className="mt-2 text-xs text-gray-400">
-          Latest: {chartData[chartData.length - 1]?.lr.toExponential(3) || 'N/A'}
+          Latest: {chartData[chartData.length - 1]?.lr.toExponential(2) || 'N/A'}
         </div>
       )}
     </div>

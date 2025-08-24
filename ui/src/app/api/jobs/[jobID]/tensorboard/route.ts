@@ -14,6 +14,7 @@ interface TensorboardEvent {
 interface TensorboardData {
   loss: TensorboardEvent[];
   learning_rate: TensorboardEvent[];
+  smooth_loss?: TensorboardEvent[];
 }
 
 function parseTensorboardLog(logPath: string): TensorboardData {
@@ -438,12 +439,48 @@ export async function GET(
         });
       }
 
-      // Parse the most recent timestamped log directory (or latest if no timestamps)
-      console.log('Using directory:', allDirs[0].path);
-      data = parseTensorboardLog(allDirs[0].path);
-      console.log('Parsed tensorboard data:', { 
+      // Parse all timestamped directories and combine the data
+      console.log('Processing all matching directories...');
+      
+      // Parse all directories with timestamps
+      for (const dir of allDirs) {
+        const hasTimestamp = dir.name.includes('_20') && dir.name.match(/_\d{8}-\d{6}$/);
+        if (hasTimestamp) {
+          console.log('Parsing directory:', dir.path);
+          const dirData = parseTensorboardLog(dir.path);
+          
+          // Merge the data
+          data.loss.push(...dirData.loss);
+          data.learning_rate.push(...dirData.learning_rate);
+        }
+      }
+      
+      // Sort and remove duplicates
+      data.loss = Array.from(new Map(data.loss.map(item => [item.step, item])).values())
+        .sort((a, b) => a.step - b.step);
+      data.learning_rate = Array.from(new Map(data.learning_rate.map(item => [item.step, item])).values())
+        .sort((a, b) => a.step - b.step);
+        
+      // Calculate smooth loss (exponential moving average)
+      if (data.loss.length > 0) {
+        const smoothingWeight = 0.9; // Higher = smoother
+        data.smooth_loss = [];
+        let lastSmoothed = data.loss[0].value;
+        
+        for (const point of data.loss) {
+          lastSmoothed = lastSmoothed * smoothingWeight + point.value * (1 - smoothingWeight);
+          data.smooth_loss.push({
+            step: point.step,
+            value: lastSmoothed,
+            wall_time: point.wall_time
+          });
+        }
+      }
+      
+      console.log('Combined tensorboard data:', { 
         lossCount: data.loss.length, 
-        lrCount: data.learning_rate.length 
+        lrCount: data.learning_rate.length,
+        smoothLossCount: data.smooth_loss?.length || 0
       });
     } catch (error) {
       console.error('Error reading tensorboard directory:', error);

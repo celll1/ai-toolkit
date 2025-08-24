@@ -1,4 +1,4 @@
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { TrendingDown } from 'lucide-react';
 
 interface TensorboardEvent {
@@ -9,14 +9,25 @@ interface TensorboardEvent {
 
 interface LossChartProps {
   data: TensorboardEvent[];
+  smoothData?: TensorboardEvent[];
   isLoading?: boolean;
 }
 
-export default function LossChart({ data, isLoading = false }: LossChartProps) {
-  const chartData = data.map(point => ({
+export default function LossChart({ data, smoothData, isLoading = false }: LossChartProps) {
+  // Combine raw and smooth data into single dataset
+  const chartData = data.map((point, index) => ({
     step: point.step,
-    loss: point.value
+    loss: point.value,
+    smoothLoss: smoothData?.[index]?.value
   }));
+  
+  // Format Y-axis tick labels to scientific notation
+  const formatYAxis = (value: number) => {
+    if (value === 0) return '0';
+    const exponent = Math.floor(Math.log10(Math.abs(value)));
+    const mantissa = value / Math.pow(10, exponent);
+    return `${mantissa.toFixed(2)}e${exponent >= 0 ? '+' : ''}${exponent}`;
+  };
 
   return (
     <div className="bg-gray-900 rounded-xl shadow-lg border border-gray-800 p-4">
@@ -48,6 +59,7 @@ export default function LossChart({ data, isLoading = false }: LossChartProps) {
                 tickLine={false}
                 axisLine={false}
                 domain={['dataMin', 'dataMax']}
+                tickFormatter={formatYAxis}
               />
               <Tooltip 
                 contentStyle={{
@@ -56,17 +68,40 @@ export default function LossChart({ data, isLoading = false }: LossChartProps) {
                   borderRadius: '8px',
                   color: '#F3F4F6'
                 }}
-                formatter={(value: number) => [value.toExponential(3), 'Loss']}
+                formatter={(value: number, name: string) => {
+                  const formatted = value.toExponential(2);
+                  const label = name === 'loss' ? 'Loss' : 'Smooth Loss';
+                  return [formatted, label];
+                }}
                 labelFormatter={(step: number) => `Step: ${step}`}
+              />
+              <Legend 
+                wrapperStyle={{
+                  fontSize: '12px',
+                  color: '#9CA3AF'
+                }}
               />
               <Line 
                 type="monotone" 
                 dataKey="loss" 
                 stroke="#EF4444" 
-                strokeWidth={2}
+                strokeWidth={1}
                 dot={false}
                 activeDot={{ r: 3, fill: '#EF4444' }}
+                opacity={0.6}
+                name="Loss"
               />
+              {smoothData && smoothData.length > 0 && (
+                <Line 
+                  type="monotone" 
+                  dataKey="smoothLoss" 
+                  stroke="#FCA5A5" 
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 3, fill: '#FCA5A5' }}
+                  name="Smooth Loss"
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
         ) : (
@@ -77,8 +112,11 @@ export default function LossChart({ data, isLoading = false }: LossChartProps) {
       </div>
       
       {chartData.length > 0 && (
-        <div className="mt-2 text-xs text-gray-400">
-          Latest: {chartData[chartData.length - 1]?.loss.toExponential(3) || 'N/A'}
+        <div className="mt-2 text-xs text-gray-400 space-y-1">
+          <div>Latest Loss: {chartData[chartData.length - 1]?.loss.toExponential(2) || 'N/A'}</div>
+          {smoothData && smoothData.length > 0 && (
+            <div>Smooth Loss: {chartData[chartData.length - 1]?.smoothLoss?.toExponential(2) || 'N/A'}</div>
+          )}
         </div>
       )}
     </div>

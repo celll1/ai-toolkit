@@ -9,10 +9,11 @@ interface TensorboardEvent {
 interface TensorboardData {
   loss: TensorboardEvent[];
   learning_rate: TensorboardEvent[];
+  smooth_loss?: TensorboardEvent[];
 }
 
 export default function useTensorboardData(jobId: string, refreshInterval: number = 10000) {
-  const [data, setData] = useState<TensorboardData>({ loss: [], learning_rate: [] });
+  const [data, setData] = useState<TensorboardData>({ loss: [], learning_rate: [], smooth_loss: [] });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
