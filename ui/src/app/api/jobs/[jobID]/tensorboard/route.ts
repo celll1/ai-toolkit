@@ -23,7 +23,10 @@ function parseTensorboardLog(logPath: string): TensorboardData {
   };
 
   try {
+    console.log('Parsing tensorboard log from:', logPath);
+    
     if (!existsSync(logPath)) {
+      console.log('Log path does not exist:', logPath);
       return data;
     }
 
@@ -37,114 +40,112 @@ function parseTensorboardLog(logPath: string): TensorboardData {
       }))
       .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
+    console.log('Found event files:', files.map(f => f.name));
+
     if (files.length === 0) {
+      console.log('No event files found');
       return data;
     }
 
     const eventFile = files[0].path;
+    console.log('Using event file:', eventFile);
     
     // Read the tensorboard event file
     const buffer = readFileSync(eventFile);
+    console.log('Event file size:', buffer.length, 'bytes');
     
-    // Tensorboard events are stored in TFRecord format with protobuf
-    // This is a more robust parser that looks for the actual protobuf structure
+    // Simplified TFRecord parsing - TensorBoard files use TFRecord format
+    // TFRecord format: [length (8 bytes)][masked_crc (4 bytes)][data][data_crc (4 bytes)]
     let offset = 0;
+    let recordCount = 0;
     
-    while (offset < buffer.length - 12) { // Need at least 12 bytes for TFRecord header
+    while (offset < buffer.length - 16) { // Need at least 16 bytes for TFRecord header + footer
       try {
-        // TFRecord format: [length][crc32][data][crc32]
-        const length = buffer.readBigUInt64LE(offset);
-        if (length > BigInt(buffer.length - offset) || length < BigInt(0)) {
+        // Read record length (8 bytes, little endian)
+        const length = Number(buffer.readBigUInt64LE(offset));
+        
+        if (length <= 0 || length > buffer.length - offset - 16) {
           offset += 1;
           continue;
         }
         
-        const lengthNum = Number(length);
-        offset += 8;
+        offset += 8; // Skip length
+        offset += 4; // Skip masked CRC
         
-        // Skip CRC32 for data length
-        offset += 4;
+        // Read the protobuf data
+        const eventData = buffer.subarray(offset, offset + length);
+        offset += length;
+        offset += 4; // Skip data CRC
         
-        if (offset + lengthNum + 4 > buffer.length) {
-          break;
-        }
+        recordCount++;
         
-        // Read the event data (protobuf)
-        const eventData = buffer.subarray(offset, offset + lengthNum);
+        // Try to parse as protobuf Event message
+        // This is a simplified approach - we look for common patterns
         
-        // Parse the protobuf-like structure for step and scalar values
-        // Look for step value (usually appears as varint)
+        // Convert to string for pattern matching (this works for simple scalar values)
+        const dataStr = eventData.toString('binary');
+        
+        // Look for step numbers and scalar values using regex patterns
+        // This is less precise but more robust than proper protobuf parsing
+        
+        // Try to extract step number
+        const stepMatches = dataStr.match(/\x10([\x00-\x7f]+)/); // Field 2, varint
         let step: number | null = null;
-        let scalarValue: number | null = null;
-        let tagName: string = '';
         
-        // Simple protobuf field parsing
-        for (let i = 0; i < eventData.length - 4; i++) {
-          // Look for step field (field 2 in Event proto)
-          if (eventData[i] === 0x10) { // Wire type 0, field 2
-            let stepVal = 0;
-            let shift = 0;
-            let j = i + 1;
-            while (j < eventData.length && (eventData[j] & 0x80)) {
-              stepVal |= (eventData[j] & 0x7F) << shift;
-              shift += 7;
-              j++;
-            }
-            if (j < eventData.length) {
-              stepVal |= (eventData[j] & 0x7F) << shift;
-              step = stepVal;
+        if (stepMatches) {
+          // Decode varint manually (simplified)
+          const varintBytes = stepMatches[1];
+          let stepVal = 0;
+          for (let i = 0; i < varintBytes.length && i < 4; i++) {
+            const byte = varintBytes.charCodeAt(i);
+            if (byte & 0x80) {
+              stepVal |= (byte & 0x7f) << (i * 7);
+            } else {
+              stepVal |= byte << (i * 7);
+              break;
             }
           }
+          step = stepVal;
+        }
+        
+        // Look for tag names and scalar values
+        const tagMatches = [...dataStr.matchAll(/\x0a([\x01-\x1f])([\x20-\x7e]+)/g)]; // String fields
+        const scalarMatches = [...dataStr.matchAll(/\x15(.{4})/g)]; // Float32 fields
+        
+        for (let i = 0; i < tagMatches.length && i < scalarMatches.length; i++) {
+          const tagMatch = tagMatches[i];
+          const scalarMatch = scalarMatches[i];
           
-          // Look for summary field (field 5) containing scalar values
-          if (eventData[i] === 0x2A) { // Wire type 2, field 5
-            const summaryLength = eventData[i + 1];
-            if (i + 2 + summaryLength < eventData.length) {
-              const summaryData = eventData.subarray(i + 2, i + 2 + summaryLength);
-              
-              // Look for tag field in summary
-              for (let k = 0; k < summaryData.length - 4; k++) {
-                if (summaryData[k] === 0x0A) { // Wire type 2, field 1 (tag)
-                  const tagLength = summaryData[k + 1];
-                  if (k + 2 + tagLength < summaryData.length) {
-                    tagName = summaryData.subarray(k + 2, k + 2 + tagLength).toString('utf8');
-                  }
-                }
-                
-                // Look for simple_value field (field 2 in Value proto)
-                if (summaryData[k] === 0x15) { // Wire type 5, field 2 (float32)
-                  if (k + 5 <= summaryData.length) {
-                    const floatBytes = summaryData.subarray(k + 1, k + 5);
-                    const view = new DataView(floatBytes.buffer, floatBytes.byteOffset, 4);
-                    scalarValue = view.getFloat32(0, true); // little endian
-                  }
-                }
-              }
+          if (tagMatch && scalarMatch && step !== null) {
+            const tagName = tagMatch[2];
+            
+            // Parse float32 value
+            const floatBytes = new Uint8Array(4);
+            for (let j = 0; j < 4; j++) {
+              floatBytes[j] = scalarMatch[1].charCodeAt(j);
+            }
+            const view = new DataView(floatBytes.buffer);
+            const scalarValue = view.getFloat32(0, true); // little endian
+            
+            const wallTime = Date.now() / 1000;
+            
+            if (tagName.toLowerCase().includes('loss')) {
+              data.loss.push({
+                step,
+                value: scalarValue,
+                wall_time: wallTime
+              });
+              console.log(`Found loss: step=${step}, value=${scalarValue}`);
+            } else if (tagName.toLowerCase().includes('lr') || tagName.toLowerCase().includes('learning_rate')) {
+              data.learning_rate.push({
+                step,
+                value: scalarValue,
+                wall_time: wallTime
+              });
+              console.log(`Found LR: step=${step}, value=${scalarValue}`);
             }
           }
         }
-        
-        // Store the parsed data
-        if (step !== null && scalarValue !== null && tagName) {
-          const wallTime = Date.now() / 1000;
-          
-          if (tagName.includes('loss') || tagName.includes('Loss')) {
-            data.loss.push({
-              step,
-              value: scalarValue,
-              wall_time: wallTime
-            });
-          } else if (tagName.includes('learning_rate') || tagName.includes('lr')) {
-            data.learning_rate.push({
-              step,
-              value: scalarValue,
-              wall_time: wallTime
-            });
-          }
-        }
-        
-        offset += lengthNum;
-        offset += 4; // Skip trailing CRC32
         
       } catch (e) {
         // Skip this record if parsing fails
@@ -152,11 +153,15 @@ function parseTensorboardLog(logPath: string): TensorboardData {
       }
     }
     
+    console.log(`Processed ${recordCount} records`);
+    
     // Remove duplicates and sort by step
     data.loss = Array.from(new Map(data.loss.map(item => [item.step, item])).values())
       .sort((a, b) => a.step - b.step);
     data.learning_rate = Array.from(new Map(data.learning_rate.map(item => [item.step, item])).values())
       .sort((a, b) => a.step - b.step);
+    
+    console.log(`Final data: loss=${data.loss.length} points, lr=${data.learning_rate.length} points`);
     
     // Keep only the last 1000 points for performance
     if (data.loss.length > 1000) {
@@ -186,49 +191,67 @@ export async function GET(
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    // Find tensorboard log directory
-    // The log directory should be in the job's training folder
+    // Find tensorboard log directory from job configuration
     const jobConfig = JSON.parse(job.job_config);
     const processConfig = jobConfig?.config?.process?.[0];
     
-    if (!processConfig?.log_dir) {
-      return NextResponse.json({ 
-        loss: [], 
-        learning_rate: [] 
-      });
-    }
-
-    // Look for the most recent log directory for this job
-    const logDir = processConfig.log_dir;
+    const logDir = processConfig?.log_dir;
     
+    if (!logDir) {
+      console.log('No log_dir specified in job configuration');
+      return NextResponse.json({ 
+        loss: [], 
+        learning_rate: [] 
+      });
+    }
+
     if (!existsSync(logDir)) {
+      console.log('Tensorboard log directory does not exist:', logDir);
       return NextResponse.json({ 
         loss: [], 
         learning_rate: [] 
       });
     }
 
-    // Find directories that match the job name pattern
-    const jobName = processConfig.name || job.name;
-    const logDirs = readdirSync(logDir)
-      .filter(dir => dir.startsWith(jobName))
-      .map(dir => ({
-        name: dir,
-        path: join(logDir, dir),
-        mtime: statSync(join(logDir, dir)).mtime
-      }))
-      .filter(dir => statSync(dir.path).isDirectory())
-      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+    let data: TensorboardData = { loss: [], learning_rate: [] };
 
-    if (logDirs.length === 0) {
-      return NextResponse.json({ 
-        loss: [], 
-        learning_rate: [] 
+    console.log('Using tensorboard log directory:', logDir);
+
+    try {
+      // Find all subdirectories (run directories with timestamps)
+      const allDirs = readdirSync(logDir)
+        .map(dir => ({
+          name: dir,
+          path: join(logDir, dir),
+          mtime: statSync(join(logDir, dir)).mtime
+        }))
+        .filter(dir => {
+          try {
+            return statSync(dir.path).isDirectory();
+          } catch {
+            return false;
+          }
+        })
+        .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+
+      console.log('Found tensorboard directories:', allDirs.map(d => d.name));
+
+      if (allDirs.length === 0) {
+        return NextResponse.json({ 
+          loss: [], 
+          learning_rate: [] 
+        });
+      }
+
+      // Parse the most recent log directory
+      data = parseTensorboardLog(allDirs[0].path);
+      console.log('Parsed tensorboard data:', { 
+        lossCount: data.loss.length, 
+        lrCount: data.learning_rate.length 
       });
+    } catch (error) {
+      console.error('Error reading tensorboard directory:', error);
     }
-
-    // Parse the most recent log directory
-    const data = parseTensorboardLog(logDirs[0].path);
 
     return NextResponse.json(data);
 
