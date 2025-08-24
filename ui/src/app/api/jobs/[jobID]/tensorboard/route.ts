@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPrismaClient } from "@/lib/db";
+import { PrismaClient } from "@prisma/client";
 import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { join } from 'path';
+
+const prisma = new PrismaClient();
 
 interface TensorboardEvent {
   step: number;
@@ -176,8 +178,7 @@ export async function GET(
   { params }: { params: { jobID: string } }
 ) {
   try {
-    const db = getPrismaClient();
-    const job = await db.job.findUnique({
+    const job = await prisma.job.findUnique({
       where: { id: params.jobID }
     });
 
