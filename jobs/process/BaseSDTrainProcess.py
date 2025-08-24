@@ -486,6 +486,14 @@ class BaseSDTrainProcess(BaseTrainProcess):
     def end_step_hook(self):
         pass
 
+    def on_error(self, e: Exception):
+        if isinstance(e, KeyboardInterrupt) and self.save_config.save_on_interrupt:
+            print_acc("")
+            print_acc("Training interrupted by user. Saving current state...")
+            if self.accelerator.is_main_process:
+                self.save(self.step_num)
+                print_acc(f"Model saved at step {self.step_num}")
+
     def save(self, step=None):
         if not self.accelerator.is_main_process:
             return
@@ -2058,247 +2066,255 @@ class BaseSDTrainProcess(BaseTrainProcess):
         start_step_num = self.step_num
         did_first_flush = False
         flush_next = False
-        for step in range(start_step_num, self.train_config.steps):
-            if self.train_config.do_paramiter_swapping:
-                self.optimizer.optimizer.swap_paramiters()
-            self.timer.start('train_loop')
-            if flush_next:
-                flush()
-                flush_next = False
-            if self.train_config.do_random_cfg:
-                self.train_config.do_cfg = True
-                self.train_config.cfg_scale = value_map(random.random(), 0, 1, 1.0, self.train_config.max_cfg_scale)
-            self.step_num = step
-            # default to true so various things can turn it off
-            self.is_grad_accumulation_step = True
-            if self.train_config.free_u:
-                self.sd.pipeline.enable_freeu(s1=0.9, s2=0.2, b1=1.1, b2=1.2)
-            if self.progress_bar is not None:
-                self.progress_bar.unpause()
-            with torch.no_grad():
-                # if is even step and we have a reg dataset, use that
-                # todo improve this logic to send one of each through if we can buckets and batch size might be an issue
-                is_reg_step = False
-                is_save_step = self.save_config.save_every and self.step_num % self.save_config.save_every == 0
-                is_sample_step = self.sample_config.sample_every and self.step_num % self.sample_config.sample_every == 0
-                if self.train_config.disable_sampling:
-                    is_sample_step = False
-
-                batch_list = []
-
-                for b in range(self.train_config.gradient_accumulation):
-                    # keep track to alternate on an accumulation step for reg   
-                    batch_step = step
-                    # don't do a reg step on sample or save steps as we dont want to normalize on those
-                    if batch_step % 2 == 0 and dataloader_reg is not None and not is_save_step and not is_sample_step:
-                        try:
-                            with self.timer('get_batch:reg'):
-                                batch = next(dataloader_iterator_reg)
-                        except StopIteration:
-                            with self.timer('reset_batch:reg'):
-                                # hit the end of an epoch, reset
-                                if self.progress_bar is not None:
-                                    self.progress_bar.pause()
-                                dataloader_iterator_reg = iter(dataloader_reg)
-                                trigger_dataloader_setup_epoch(dataloader_reg)
-
-                            with self.timer('get_batch:reg'):
-                                batch = next(dataloader_iterator_reg)
-                            if self.progress_bar is not None:
-                                self.progress_bar.unpause()
-                        is_reg_step = True
-                    elif dataloader is not None:
-                        try:
-                            with self.timer('get_batch'):
-                                batch = next(dataloader_iterator)
-                        except StopIteration:
-                            with self.timer('reset_batch'):
-                                # hit the end of an epoch, reset
-                                if self.progress_bar is not None:
-                                    self.progress_bar.pause()
-                                dataloader_iterator = iter(dataloader)
-                                trigger_dataloader_setup_epoch(dataloader)
-                                self.epoch_num += 1
-                                if self.train_config.gradient_accumulation_steps == -1:
-                                    # if we are accumulating for an entire epoch, trigger a step
-                                    self.is_grad_accumulation_step = False
-                                    self.grad_accumulation_step = 0
-                            with self.timer('get_batch'):
-                                batch = next(dataloader_iterator)
-                            if self.progress_bar is not None:
-                                self.progress_bar.unpause()
-                    else:
-                        batch = None
-                    batch_list.append(batch)
-                    batch_step += 1
-
-                # setup accumulation
-                if self.train_config.gradient_accumulation_steps == -1:
-                    # epoch is handling the accumulation, dont touch it
-                    pass
-                else:
-                    # determine if we are accumulating or not
-                    # since optimizer step happens in the loop, we trigger it a step early
-                    # since we cannot reprocess it before them
-                    optimizer_step_at = self.train_config.gradient_accumulation_steps
-                    is_optimizer_step = self.grad_accumulation_step >= optimizer_step_at
-                    self.is_grad_accumulation_step = not is_optimizer_step
-                    if is_optimizer_step:
-                        self.grad_accumulation_step = 0
-
-            # flush()
-            ### HOOK ###
-            if self.torch_profiler is not None:
-                self.torch_profiler.start()
-            with self.accelerator.accumulate(self.modules_being_trained):
-                try:
-                    loss_dict = self.hook_train_loop(batch_list)
-                except Exception as e:
-                    traceback.print_exc()
-                    #print batch info
-                    print("Batch Items:")
-                    for batch in batch_list:
-                        for item in batch.file_items:
-                            print(f" - {item.path}")
-                    raise e
-            if self.torch_profiler is not None:
-                torch.cuda.synchronize()  # Make sure all CUDA ops are done
-                self.torch_profiler.stop()
-                
-                print("\n==== Profile Results ====")
-                print(self.torch_profiler.key_averages().table(sort_by="cpu_time_total", row_limit=1000))
-            self.timer.stop('train_loop')
-            if not did_first_flush:
-                flush()
-                did_first_flush = True
-            # flush()
-            # setup the networks to gradient checkpointing and everything works
-            if self.adapter is not None and isinstance(self.adapter, ReferenceAdapter):
-                self.adapter.clear_memory()
-
-            with torch.no_grad():
-                # torch.cuda.empty_cache()
-                # if optimizer has get_lrs method, then use it
-                if hasattr(optimizer, 'get_avg_learning_rate'):
-                    learning_rate = optimizer.get_avg_learning_rate()
-                elif hasattr(optimizer, 'get_learning_rates'):
-                    learning_rate = optimizer.get_learning_rates()[0]
-                elif self.train_config.optimizer.lower().startswith('dadaptation') or \
-                        self.train_config.optimizer.lower().startswith('prodigy'):
-                    learning_rate = (
-                            optimizer.param_groups[0]["d"] *
-                            optimizer.param_groups[0]["lr"]
-                    )
-                else:
-                    learning_rate = optimizer.param_groups[0]['lr']
-
-                prog_bar_string = f"lr: {learning_rate:.1e}"
-                for key, value in loss_dict.items():
-                    prog_bar_string += f" {key}: {value:.3e}"
-
+        try:
+            for step in range(start_step_num, self.train_config.steps):
+                if self.train_config.do_paramiter_swapping:
+                    self.optimizer.optimizer.swap_paramiters()
+                    self.timer.start('train_loop')
+                if flush_next:
+                    flush()
+                    flush_next = False
+                if self.train_config.do_random_cfg:
+                    self.train_config.do_cfg = True
+                    self.train_config.cfg_scale = value_map(random.random(), 0, 1, 1.0, self.train_config.max_cfg_scale)
+                self.step_num = step
+                # default to true so various things can turn it off
+                self.is_grad_accumulation_step = True
+                if self.train_config.free_u:
+                    self.sd.pipeline.enable_freeu(s1=0.9, s2=0.2, b1=1.1, b2=1.2)
                 if self.progress_bar is not None:
-                    self.progress_bar.set_postfix_str(prog_bar_string)
+                    self.progress_bar.unpause()
+                with torch.no_grad():
+                    # if is even step and we have a reg dataset, use that
+                    # todo improve this logic to send one of each through if we can buckets and batch size might be an issue
+                    is_reg_step = False
+                    is_save_step = self.save_config.save_every and self.step_num % self.save_config.save_every == 0
+                    is_sample_step = self.sample_config.sample_every and self.step_num % self.sample_config.sample_every == 0
+                    if self.train_config.disable_sampling:
+                        is_sample_step = False
 
-                # if the batch is a DataLoaderBatchDTO, then we need to clean it up
-                if isinstance(batch, DataLoaderBatchDTO):
-                    with self.timer('batch_cleanup'):
-                        batch.cleanup()
+                    batch_list = []
 
-                # don't do on first step
-                if self.step_num != self.start_step:
-                    if is_sample_step or is_save_step:
-                        self.accelerator.wait_for_everyone()
-                    if is_sample_step:
-                        if self.progress_bar is not None:
-                            self.progress_bar.pause()
-                        flush()
-                        # print above the progress bar
-                        if self.train_config.free_u:
-                            self.sd.pipeline.disable_freeu()
-                        self.sample(self.step_num)
-                        if self.train_config.unload_text_encoder:
-                            # make sure the text encoder is unloaded
-                            self.sd.text_encoder_to('cpu')
-                        flush()
+                    for b in range(self.train_config.gradient_accumulation):
+                        # keep track to alternate on an accumulation step for reg   
+                        batch_step = step
+                        # don't do a reg step on sample or save steps as we dont want to normalize on those
+                        if batch_step % 2 == 0 and dataloader_reg is not None and not is_save_step and not is_sample_step:
+                            try:
+                                with self.timer('get_batch:reg'):
+                                    batch = next(dataloader_iterator_reg)
+                            except StopIteration:
+                                with self.timer('reset_batch:reg'):
+                                    # hit the end of an epoch, reset
+                                    if self.progress_bar is not None:
+                                        self.progress_bar.pause()
+                                    dataloader_iterator_reg = iter(dataloader_reg)
+                                    trigger_dataloader_setup_epoch(dataloader_reg)
 
-                        self.ensure_params_requires_grad()
-                        if self.progress_bar is not None:
-                            self.progress_bar.unpause()
-
-                    if is_save_step:
-                        self.accelerator
-                        # print above the progress bar
-                        if self.progress_bar is not None:
-                            self.progress_bar.pause()
-                        print_acc(f"\nSaving at step {self.step_num}")
-                        self.save(self.step_num)
-                        self.ensure_params_requires_grad()
-                        # clear any grads
-                        optimizer.zero_grad()
-                        flush()
-                        flush_next = True
-                        if self.progress_bar is not None:
-                            self.progress_bar.unpause()
-
-                    if self.logging_config.log_every and self.step_num % self.logging_config.log_every == 0:
-                        if self.progress_bar is not None:
-                            self.progress_bar.pause()
-                        with self.timer('log_to_tensorboard'):
-                            # log to tensorboard
-                            if self.accelerator.is_main_process:
-                                if self.writer is not None:
-                                    for key, value in loss_dict.items():
-                                        self.writer.add_scalar(f"{key}", value, self.step_num)
-                                    self.writer.add_scalar(f"lr", learning_rate, self.step_num)
+                                with self.timer('get_batch:reg'):
+                                    batch = next(dataloader_iterator_reg)
                                 if self.progress_bar is not None:
                                     self.progress_bar.unpause()
-                        
-                        if self.accelerator.is_main_process:
-                            # log to logger
-                            self.logger.log({
-                                'learning_rate': learning_rate,
-                            })
-                            for key, value in loss_dict.items():
+                            is_reg_step = True
+                        elif dataloader is not None:
+                            try:
+                                with self.timer('get_batch'):
+                                    batch = next(dataloader_iterator)
+                            except StopIteration:
+                                with self.timer('reset_batch'):
+                                    # hit the end of an epoch, reset
+                                    if self.progress_bar is not None:
+                                        self.progress_bar.pause()
+                                    dataloader_iterator = iter(dataloader)
+                                    trigger_dataloader_setup_epoch(dataloader)
+                                    self.epoch_num += 1
+                                    if self.train_config.gradient_accumulation_steps == -1:
+                                        # if we are accumulating for an entire epoch, trigger a step
+                                        self.is_grad_accumulation_step = False
+                                        self.grad_accumulation_step = 0
+                                with self.timer('get_batch'):
+                                    batch = next(dataloader_iterator)
+                                if self.progress_bar is not None:
+                                    self.progress_bar.unpause()
+                        else:
+                            batch = None
+                        batch_list.append(batch)
+                        batch_step += 1
+
+                    # setup accumulation
+                    if self.train_config.gradient_accumulation_steps == -1:
+                        # epoch is handling the accumulation, dont touch it
+                        pass
+                    else:
+                        # determine if we are accumulating or not
+                        # since optimizer step happens in the loop, we trigger it a step early
+                        # since we cannot reprocess it before them
+                        optimizer_step_at = self.train_config.gradient_accumulation_steps
+                        is_optimizer_step = self.grad_accumulation_step >= optimizer_step_at
+                        self.is_grad_accumulation_step = not is_optimizer_step
+                        if is_optimizer_step:
+                            self.grad_accumulation_step = 0
+
+                # flush()
+                ### HOOK ###
+                if self.torch_profiler is not None:
+                    self.torch_profiler.start()
+                with self.accelerator.accumulate(self.modules_being_trained):
+                    try:
+                        loss_dict = self.hook_train_loop(batch_list)
+                    except Exception as e:
+                        traceback.print_exc()
+                        #print batch info
+                        print("Batch Items:")
+                        for batch in batch_list:
+                            for item in batch.file_items:
+                                print(f" - {item.path}")
+                        raise e
+                if self.torch_profiler is not None:
+                    torch.cuda.synchronize()  # Make sure all CUDA ops are done
+                    self.torch_profiler.stop()
+                    
+                    print("\n==== Profile Results ====")
+                    print(self.torch_profiler.key_averages().table(sort_by="cpu_time_total", row_limit=1000))
+                self.timer.stop('train_loop')
+                if not did_first_flush:
+                    flush()
+                    did_first_flush = True
+                # flush()
+                # setup the networks to gradient checkpointing and everything works
+                if self.adapter is not None and isinstance(self.adapter, ReferenceAdapter):
+                    self.adapter.clear_memory()
+
+                with torch.no_grad():
+                    # torch.cuda.empty_cache()
+                    # if optimizer has get_lrs method, then use it
+                    if hasattr(optimizer, 'get_avg_learning_rate'):
+                        learning_rate = optimizer.get_avg_learning_rate()
+                    elif hasattr(optimizer, 'get_learning_rates'):
+                        learning_rate = optimizer.get_learning_rates()[0]
+                    elif self.train_config.optimizer.lower().startswith('dadaptation') or \
+                            self.train_config.optimizer.lower().startswith('prodigy'):
+                        learning_rate = (
+                                optimizer.param_groups[0]["d"] *
+                                optimizer.param_groups[0]["lr"]
+                        )
+                    else:
+                        learning_rate = optimizer.param_groups[0]['lr']
+
+                    prog_bar_string = f"lr: {learning_rate:.1e}"
+                    for key, value in loss_dict.items():
+                        prog_bar_string += f" {key}: {value:.3e}"
+
+                    if self.progress_bar is not None:
+                        self.progress_bar.set_postfix_str(prog_bar_string)
+
+                    # if the batch is a DataLoaderBatchDTO, then we need to clean it up
+                    if isinstance(batch, DataLoaderBatchDTO):
+                        with self.timer('batch_cleanup'):
+                            batch.cleanup()
+
+                    # don't do on first step
+                    if self.step_num != self.start_step:
+                        if is_sample_step or is_save_step:
+                            self.accelerator.wait_for_everyone()
+                        if is_sample_step:
+                            if self.progress_bar is not None:
+                                self.progress_bar.pause()
+                            flush()
+                            # print above the progress bar
+                            if self.train_config.free_u:
+                                self.sd.pipeline.disable_freeu()
+                            self.sample(self.step_num)
+                            if self.train_config.unload_text_encoder:
+                                # make sure the text encoder is unloaded
+                                self.sd.text_encoder_to('cpu')
+                            flush()
+
+                            self.ensure_params_requires_grad()
+                            if self.progress_bar is not None:
+                                self.progress_bar.unpause()
+
+                        if is_save_step:
+                            self.accelerator
+                            # print above the progress bar
+                            if self.progress_bar is not None:
+                                self.progress_bar.pause()
+                            print_acc(f"\nSaving at step {self.step_num}")
+                            self.save(self.step_num)
+                            self.ensure_params_requires_grad()
+                            # clear any grads
+                            optimizer.zero_grad()
+                            flush()
+                            flush_next = True
+                            if self.progress_bar is not None:
+                                self.progress_bar.unpause()
+
+                        if self.logging_config.log_every and self.step_num % self.logging_config.log_every == 0:
+                            if self.progress_bar is not None:
+                                self.progress_bar.pause()
+                            with self.timer('log_to_tensorboard'):
+                                # log to tensorboard
+                                if self.accelerator.is_main_process:
+                                    if self.writer is not None:
+                                        for key, value in loss_dict.items():
+                                            self.writer.add_scalar(f"{key}", value, self.step_num)
+                                        self.writer.add_scalar(f"lr", learning_rate, self.step_num)
+                                    if self.progress_bar is not None:
+                                        self.progress_bar.unpause()
+                            
+                            if self.accelerator.is_main_process:
+                                # log to logger
                                 self.logger.log({
-                                    f'loss/{key}': value,
+                                    'learning_rate': learning_rate,
                                 })
-                    elif self.logging_config.log_every is None:
-                        if self.accelerator.is_main_process:
-                            # log every step
-                            self.logger.log({
-                                'learning_rate': learning_rate,
-                            })
-                            for key, value in loss_dict.items():
+                                for key, value in loss_dict.items():
+                                    self.logger.log({
+                                        f'loss/{key}': value,
+                                    })
+                        elif self.logging_config.log_every is None:
+                            if self.accelerator.is_main_process:
+                                # log every step
                                 self.logger.log({
-                                    f'loss/{key}': value,
+                                    'learning_rate': learning_rate,
                                 })
+                                for key, value in loss_dict.items():
+                                    self.logger.log({
+                                        f'loss/{key}': value,
+                                    })
 
 
-                    if self.performance_log_every > 0 and self.step_num % self.performance_log_every == 0:
-                        if self.progress_bar is not None:
-                            self.progress_bar.pause()
-                        # print the timers and clear them
-                        self.timer.print()
-                        self.timer.reset()
-                        if self.progress_bar is not None:
-                            self.progress_bar.unpause()
-                
-                # commit log
-                if self.accelerator.is_main_process:
-                    self.logger.commit(step=self.step_num)
+                        if self.performance_log_every > 0 and self.step_num % self.performance_log_every == 0:
+                            if self.progress_bar is not None:
+                                self.progress_bar.pause()
+                            # print the timers and clear them
+                            self.timer.print()
+                            self.timer.reset()
+                            if self.progress_bar is not None:
+                                self.progress_bar.unpause()
+                    
+                    # commit log
+                    if self.accelerator.is_main_process:
+                        self.logger.commit(step=self.step_num)
 
-                # sets progress bar to match out step
-                if self.progress_bar is not None:
-                    self.progress_bar.update(step - self.progress_bar.n)
+                    # sets progress bar to match out step
+                    if self.progress_bar is not None:
+                        self.progress_bar.update(step - self.progress_bar.n)
 
-                #############################
-                # End of step
-                #############################
+                    #############################
+                    # End of step
+                    #############################
 
-                # update various steps
-                self.step_num = step + 1
-                self.grad_accumulation_step += 1
-                self.end_step_hook()
+                    # update various steps
+                    self.step_num = step + 1
+                    self.grad_accumulation_step += 1
+                    self.end_step_hook()
+        except KeyboardInterrupt:
+            print_acc("")
+            print_acc("Training interrupted by user. Saving current state...")
+            if self.save_config.save_on_interrupt and self.accelerator.is_main_process:
+                self.save(self.step_num)
+                print_acc(f"Model saved at step {self.step_num}")
+            raise
 
 
         ###################################################################
