@@ -195,7 +195,7 @@ export async function GET(
     const jobConfig = JSON.parse(job.job_config);
     const processConfig = jobConfig?.config?.process?.[0];
     
-    const logDir = processConfig?.log_dir;
+    let logDir = processConfig?.log_dir;
     
     if (!logDir) {
       console.log('No log_dir specified in job configuration');
@@ -205,13 +205,31 @@ export async function GET(
       });
     }
 
-    if (!existsSync(logDir)) {
-      console.log('Tensorboard log directory does not exist:', logDir);
+    // Check if we need to look in the .tensorboard subdirectory
+    // Try the configured path first, then try .tensorboard subdirectory
+    const possibleLogDirs = [
+      logDir,
+      join(logDir, '.tensorboard')
+    ];
+
+    let actualLogDir = null;
+    for (const candidate of possibleLogDirs) {
+      if (existsSync(candidate)) {
+        actualLogDir = candidate;
+        console.log(`Found tensorboard directory: ${candidate}`);
+        break;
+      }
+    }
+
+    if (!actualLogDir) {
+      console.log('Tensorboard log directory does not exist. Tried:', possibleLogDirs);
       return NextResponse.json({ 
         loss: [], 
         learning_rate: [] 
       });
     }
+
+    logDir = actualLogDir;
 
     let data: TensorboardData = { loss: [], learning_rate: [] };
 
@@ -233,16 +251,28 @@ export async function GET(
           try {
             const isDirectory = statSync(dir.path).isDirectory();
             const matchesJobName = dir.name.startsWith(jobName);
-            console.log(`Directory ${dir.name}: isDirectory=${isDirectory}, matchesJobName=${matchesJobName}`);
+            // Prefer directories with timestamps (job_name_YYYYMMDD-HHMMSS format)
+            const hasTimestamp = dir.name.includes('_20') && dir.name.match(/_\d{8}-\d{6}$/);
+            console.log(`Directory ${dir.name}: isDirectory=${isDirectory}, matchesJobName=${matchesJobName}, hasTimestamp=${hasTimestamp}`);
             return isDirectory && matchesJobName;
           } catch (error) {
             console.log(`Error checking directory ${dir.name}:`, error);
             return false;
           }
         })
-        .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+        .sort((a, b) => {
+          // First prioritize directories with timestamps
+          const aHasTimestamp = a.name.includes('_20') && a.name.match(/_\d{8}-\d{6}$/);
+          const bHasTimestamp = b.name.includes('_20') && b.name.match(/_\d{8}-\d{6}$/);
+          
+          if (aHasTimestamp && !bHasTimestamp) return -1;
+          if (!aHasTimestamp && bHasTimestamp) return 1;
+          
+          // If both have timestamps or both don't, sort by modification time
+          return b.mtime.getTime() - a.mtime.getTime();
+        });
 
-      console.log('Found matching tensorboard directories:', allDirs.map(d => d.name));
+      console.log('Found matching tensorboard directories (sorted):', allDirs.map(d => d.name));
 
       if (allDirs.length === 0) {
         console.log(`No directories found matching job name "${jobName}" in ${logDir}`);
@@ -262,7 +292,7 @@ export async function GET(
         });
       }
 
-      // Parse the most recent log directory
+      // Parse the most recent timestamped log directory (or latest if no timestamps)
       console.log('Using directory:', allDirs[0].path);
       data = parseTensorboardLog(allDirs[0].path);
       console.log('Parsed tensorboard data:', { 
