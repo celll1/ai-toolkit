@@ -9,6 +9,7 @@ import Card from '@/components/Card';
 import { X } from 'lucide-react';
 import AddSingleImageModal, { openAddImageModal } from '@/components/AddSingleImageModal';
 import useDatasetList from '@/hooks/useDatasetList';
+import { apiClient } from '@/utils/api';
 
 type Props = {
   jobConfig: JobConfig;
@@ -43,6 +44,41 @@ export default function SimpleJob({
   
   // Get dataset information including image counts
   const { datasets: datasetInfo } = useDatasetList();
+  
+  // Function to add random prompt from dataset
+  const addRandomPromptFromDataset = async () => {
+    const datasets = jobConfig.config.process[0].datasets;
+    if (datasets.length === 0) {
+      alert('No datasets selected. Please add a dataset first.');
+      return;
+    }
+    
+    // Get a random dataset from the selected ones
+    const randomDataset = datasets[Math.floor(Math.random() * datasets.length)];
+    const datasetName = randomDataset.folder_path.split(/[/\\]/).pop();
+    
+    if (!datasetName) {
+      alert('Invalid dataset selected.');
+      return;
+    }
+    
+    try {
+      const response = await apiClient.post('/api/datasets/random-caption', {
+        datasetName: datasetName
+      });
+      
+      const { caption } = response.data;
+      
+      // Add the caption as a new sample
+      setJobConfig(
+        [...jobConfig.config.process[0].sample.samples, { prompt: caption }],
+        'config.process[0].sample.samples'
+      );
+    } catch (error) {
+      console.error('Error fetching random caption:', error);
+      alert('Failed to fetch random prompt from dataset. Please try again.');
+    }
+  };
 
   const numTopCards = useMemo(() => {
     let count = 4; // job settings, model config, target config, save config
@@ -1047,18 +1083,29 @@ export default function SimpleJob({
                 </div>
               </div>
             ))}
-            <button
-              type="button"
-              onClick={() =>
-                setJobConfig(
-                  [...jobConfig.config.process[0].sample.samples, { prompt: '' }],
-                  'config.process[0].sample.samples',
-                )
-              }
-              className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-            >
-              Add Prompt
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setJobConfig(
+                    [...jobConfig.config.process[0].sample.samples, { prompt: '' }],
+                    'config.process[0].sample.samples',
+                  )
+                }
+                className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+              >
+                Add Prompt
+              </button>
+              <button
+                type="button"
+                onClick={addRandomPromptFromDataset}
+                disabled={jobConfig.config.process[0].datasets.length === 0}
+                className="flex-1 px-4 py-2 bg-blue-700 hover:bg-blue-600 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg transition-colors"
+                title={jobConfig.config.process[0].datasets.length === 0 ? "Add a dataset first" : "Add random prompt from selected dataset"}
+              >
+                Add from Dataset
+              </button>
+            </div>
           </Card>
         </div>
 
