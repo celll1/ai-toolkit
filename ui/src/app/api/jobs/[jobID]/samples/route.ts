@@ -35,29 +35,24 @@ export async function GET(request: NextRequest, { params }: { params: { jobID: s
       const fullPath = path.join(samplesFolder, file);
       const stats = fs.statSync(fullPath);
       
-      // Extract step from filename (e.g., "sample_step_1000_0.png" -> 1000)
-      const stepMatch = file.match(/step_(\d+)/);
-      const step = stepMatch ? parseInt(stepMatch[1]) : 0;
-      
-      // Extract sample index (e.g., "sample_step_1000_0.png" -> 0)
-      const indexMatch = file.match(/_(\d+)\.[^.]+$/);
-      const sampleIndex = indexMatch ? parseInt(indexMatch[1]) : 0;
+      // Extract sample index from filename
+      // Format is usually: <timestamp>_<padded_step>_<sample_index>.<ext>
+      // Example: "1703123456__00000500_0.png" where 0 is the sample index
+      const parts = file.split('.')[0].split('_');
+      const sampleIndex = parts.length > 0 ? parseInt(parts[parts.length - 1]) || 0 : 0;
       
       return {
         path: fullPath,
         filename: file,
-        step,
+        step: 0, // We can't reliably extract training step from filename
         sampleIndex,
         createdAt: stats.ctime.toISOString(),
         size: stats.size
       };
     })
     .sort((a, b) => {
-      // Sort by step first, then by sample index
-      if (a.step !== b.step) {
-        return b.step - a.step; // Newest steps first
-      }
-      return a.sampleIndex - b.sampleIndex;
+      // Sort by creation time descending (newest first)
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
   return NextResponse.json({ samples });
