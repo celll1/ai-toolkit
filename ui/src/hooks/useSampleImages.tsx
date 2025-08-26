@@ -3,8 +3,17 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '@/utils/api';
 
+interface SampleData {
+  path: string;
+  filename: string;
+  step: number;
+  sampleIndex: number;
+  createdAt: string;
+  size: number;
+}
+
 export default function useSampleImages(jobID: string, reloadInterval: null | number = null) {
-  const [sampleImages, setSampleImages] = useState<string[]>([]);
+  const [sampleImages, setSampleImages] = useState<SampleData[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
   const refreshSampleImages = () => {
@@ -20,7 +29,7 @@ export default function useSampleImages(jobID: string, reloadInterval: null | nu
         setStatus('success');
       })
       .catch(error => {
-        console.error('Error fetching datasets:', error);
+        console.error('Error fetching sample images:', error);
         setStatus('error');
       });
   };
