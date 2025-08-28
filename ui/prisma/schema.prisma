@@ -36,3 +36,12 @@ model Queue {
   status     String   @default("waiting")
   @@index([job_id, channel])
 }
+
+model Dataset {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  type        String   @default("local") // "local" or "linked"
+  external_path String? // Path to external dataset (only for linked datasets)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+}

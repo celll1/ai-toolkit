@@ -6,6 +6,8 @@ import { apiClient } from '@/utils/api';
 export interface Dataset {
   name: string;
   imageCount: number;
+  type?: 'local' | 'linked';
+  externalPath?: string;
 }
 
 export default function useDatasetList() {
