@@ -804,6 +804,7 @@ class DatasetConfig:
         # JSON caption support
         self.caption_format: str = kwargs.get('caption_format', 'txt')  # 'txt' or 'json'
         self.json_attribute: str = kwargs.get('json_attribute', 'tags')  # attribute to extract from JSON
+        self.json_filters: List[Dict] = kwargs.get('json_filters', [])  # JSON field filters for data sampling
         self.random_scale: bool = kwargs.get('random_scale', False)
         self.random_crop: bool = kwargs.get('random_crop', False)
         self.resolution: int = kwargs.get('resolution', 512)

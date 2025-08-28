@@ -5,6 +5,7 @@ import random
 import traceback
 from functools import lru_cache
 from typing import List, TYPE_CHECKING
+from toolkit.json_filter_utils import apply_json_filters
 
 import cv2
 import numpy as np
@@ -518,6 +519,28 @@ class AiToolkitDataset(LatentCachingMixin, ControlCachingMixin, CLIPCachingMixin
         else:
             print_acc(f"  -  Found {len(self.file_list)} images")
             assert len(self.file_list) > 0, f"no images found in {self.dataset_path}"
+        
+        # Apply JSON filters if enabled for JSON caption format
+        if (hasattr(self.dataset_config, 'caption_format') and 
+            self.dataset_config.caption_format == 'json' and 
+            hasattr(self.dataset_config, 'json_filters') and 
+            self.dataset_config.json_filters):
+            
+            print_acc("  -  Applying JSON field filters...")
+            original_size = len(self.file_list)
+            filtered_file_list = []
+            
+            for file_item in self.file_list:
+                img_path = file_item.path if hasattr(file_item, 'path') else file_item
+                if apply_json_filters(img_path, self.dataset_config.json_filters):
+                    filtered_file_list.append(file_item)
+            
+            self.file_list = filtered_file_list
+            filtered_size = len(self.file_list)
+            print_acc(f"  -  JSON filters: {filtered_size}/{original_size} {'videos' if self.is_video else 'images'} passed filters")
+            
+            if filtered_size == 0:
+                print_acc("  -  WARNING: No files passed JSON filters! Check filter configuration.")
         
         # Apply sampling if sample_size is specified
         if self.dataset_config.sample_size is not None and self.dataset_config.sample_size > 0:

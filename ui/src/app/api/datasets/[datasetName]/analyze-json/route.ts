@@ -71,8 +71,44 @@ export async function GET(
 
     // Analyze up to 10 JSON files to find common attributes
     const attributeFrequency: { [key: string]: number } = {};
+    const attributeTypes: { [key: string]: { type: string, values: Set<any>, min?: number, max?: number } } = {};
     const sampleData: any[] = [];
     const maxSamples = Math.min(10, jsonFiles.length);
+
+    // Helper function to analyze nested objects
+    const analyzeNestedObject = (obj: any, prefix: string = '') => {
+      for (const key of Object.keys(obj)) {
+        const fullKey = prefix ? `${prefix}.${key}` : key;
+        const value = obj[key];
+        
+        if (typeof value === 'string' && value.trim()) {
+          attributeFrequency[fullKey] = (attributeFrequency[fullKey] || 0) + 1;
+          if (!attributeTypes[fullKey]) {
+            attributeTypes[fullKey] = { type: 'string', values: new Set() };
+          }
+        } else if (typeof value === 'number') {
+          attributeFrequency[fullKey] = (attributeFrequency[fullKey] || 0) + 1;
+          if (!attributeTypes[fullKey]) {
+            attributeTypes[fullKey] = { type: 'number', values: new Set(), min: value, max: value };
+          } else {
+            attributeTypes[fullKey].min = Math.min(attributeTypes[fullKey].min || value, value);
+            attributeTypes[fullKey].max = Math.max(attributeTypes[fullKey].max || value, value);
+          }
+          attributeTypes[fullKey].values.add(value);
+        } else if (typeof value === 'boolean') {
+          attributeFrequency[fullKey] = (attributeFrequency[fullKey] || 0) + 1;
+          if (!attributeTypes[fullKey]) {
+            attributeTypes[fullKey] = { type: 'boolean', values: new Set() };
+          }
+          attributeTypes[fullKey].values.add(value);
+        } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          // Recursively analyze nested objects (1 level deep only for simplicity)
+          if (!prefix) {
+            analyzeNestedObject(value, fullKey);
+          }
+        }
+      }
+    };
 
     for (let i = 0; i < maxSamples; i++) {
       try {
@@ -81,13 +117,7 @@ export async function GET(
         
         if (typeof jsonData === 'object' && jsonData !== null) {
           sampleData.push(jsonData);
-          
-          // Count occurrences of each attribute
-          for (const key of Object.keys(jsonData)) {
-            if (typeof jsonData[key] === 'string' && jsonData[key].trim()) {
-              attributeFrequency[key] = (attributeFrequency[key] || 0) + 1;
-            }
-          }
+          analyzeNestedObject(jsonData);
         }
       } catch (error) {
         console.error(`Error parsing JSON file ${jsonFiles[i]}:`, error);
@@ -98,8 +128,12 @@ export async function GET(
     const availableAttributes = Object.keys(attributeFrequency)
       .map(attr => ({
         name: attr,
+        type: attributeTypes[attr]?.type || 'unknown',
         frequency: attributeFrequency[attr],
-        percentage: Math.round((attributeFrequency[attr] / maxSamples) * 100)
+        percentage: Math.round((attributeFrequency[attr] / maxSamples) * 100),
+        min: attributeTypes[attr]?.min,
+        max: attributeTypes[attr]?.max,
+        uniqueValues: Array.from(attributeTypes[attr]?.values || []).slice(0, 10) // Limit to 10 unique values for display
       }))
       .sort((a, b) => b.frequency - a.frequency);
 

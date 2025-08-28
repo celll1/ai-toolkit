@@ -2,7 +2,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { modelArchs, ModelArch, groupedModelOptions, quantizationOptions, defaultQtype } from './options';
 import { defaultDatasetConfig } from './jobConfig';
-import { GroupedSelectOption, JobConfig, SelectOption } from '@/types';
+import { GroupedSelectOption, JobConfig, SelectOption, JsonFilter } from '@/types';
 import { objectCopy } from '@/utils/basic';
 import { TextInput, SelectInput, Checkbox, FormGroup, NumberInput } from '@/components/formInputs';
 import Card from '@/components/Card';
@@ -84,6 +84,39 @@ export default function SimpleJob({
     loadExistingAttributes();
   }, [jobConfig.config.process[0].datasets]);
   
+  // Function to add/update JSON filter for a dataset
+  const updateJsonFilter = (datasetIndex: number, field: string, filterData: Partial<JsonFilter>) => {
+    const dataset = jobConfig.config.process[0].datasets[datasetIndex];
+    const currentFilters = dataset.json_filters || [];
+    
+    const existingFilterIndex = currentFilters.findIndex(f => f.field === field);
+    
+    if (existingFilterIndex >= 0) {
+      // Update existing filter
+      const updatedFilters = [...currentFilters];
+      updatedFilters[existingFilterIndex] = { ...updatedFilters[existingFilterIndex], ...filterData };
+      setJobConfig(updatedFilters, `config.process[0].datasets[${datasetIndex}].json_filters`);
+    } else {
+      // Add new filter
+      const newFilter: JsonFilter = {
+        field,
+        type: filterData.type || 'number',
+        enabled: filterData.enabled || false,
+        operator: filterData.operator || '>=',
+        value: filterData.value
+      };
+      setJobConfig([...currentFilters, newFilter], `config.process[0].datasets[${datasetIndex}].json_filters`);
+    }
+  };
+
+  // Function to remove JSON filter
+  const removeJsonFilter = (datasetIndex: number, field: string) => {
+    const dataset = jobConfig.config.process[0].datasets[datasetIndex];
+    const currentFilters = dataset.json_filters || [];
+    const updatedFilters = currentFilters.filter(f => f.field !== field);
+    setJobConfig(updatedFilters, `config.process[0].datasets[${datasetIndex}].json_filters`);
+  };
+
   // Function to add random prompt from dataset
   const addRandomPromptFromDataset = async () => {
     const datasets = jobConfig.config.process[0].datasets;
@@ -696,6 +729,133 @@ export default function SimpleJob({
                         min={1}
                         docKey="datasets.sample_size"
                       />
+                      
+                      {/* JSON Filters Section */}
+                      {dataset.caption_format === 'json' && (
+                        <div className="pt-4 border-t border-gray-700">
+                          <h4 className="text-sm font-semibold text-gray-200 mb-2">JSON Field Filters</h4>
+                          <div className="text-xs text-gray-400 mb-3">
+                            Filter dataset samples based on JSON field values. Only samples matching all enabled filters will be included.
+                          </div>
+                          
+                          {(() => {
+                            const datasetName = dataset.folder_path.split(/[/\\]/).pop();
+                            const attributes = datasetName ? datasetAttributes[datasetName] || [] : [];
+                            const numericAndBooleanFields = attributes.filter(attr => attr.type === 'number' || attr.type === 'boolean');
+                            
+                            if (numericAndBooleanFields.length === 0) {
+                              return (
+                                <div className="text-xs text-gray-500 italic">
+                                  No numeric or boolean fields found for filtering. 
+                                  {attributes.length === 0 ? ' Click "Analyze" above to detect available fields.' : ''}
+                                </div>
+                              );
+                            }
+
+                            return numericAndBooleanFields.map(attr => {
+                              const currentFilter = (dataset.json_filters || []).find(f => f.field === attr.name);
+                              const isEnabled = currentFilter?.enabled || false;
+
+                              return (
+                                <div key={attr.name} className="mb-3 p-3 bg-gray-900 rounded border">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center space-x-2">
+                                      <Checkbox
+                                        label=""
+                                        checked={isEnabled}
+                                        onChange={(enabled) => 
+                                          updateJsonFilter(i, attr.name, { 
+                                            enabled, 
+                                            type: attr.type as 'number' | 'boolean' 
+                                          })
+                                        }
+                                      />
+                                      <span className="text-sm font-medium text-gray-200">
+                                        {attr.name} ({attr.type})
+                                      </span>
+                                      <span className="text-xs text-gray-500">
+                                        {attr.percentage}% of files
+                                      </span>
+                                    </div>
+                                    {isEnabled && (
+                                      <button
+                                        type="button"
+                                        onClick={() => removeJsonFilter(i, attr.name)}
+                                        className="text-red-400 hover:text-red-300 text-xs"
+                                      >
+                                        ×
+                                      </button>
+                                    )}
+                                  </div>
+                                  
+                                  {isEnabled && (
+                                    <div className="mt-2">
+                                      {attr.type === 'number' ? (
+                                        <div className="flex items-center space-x-2">
+                                          <SelectInput
+                                            label=""
+                                            value={currentFilter?.operator || '>='}
+                                            onChange={(operator) => 
+                                              updateJsonFilter(i, attr.name, { operator: operator as any })
+                                            }
+                                            options={[
+                                              { value: '>=', label: '>= (greater than or equal)' },
+                                              { value: '<=', label: '<= (less than or equal)' },
+                                              { value: '>', label: '> (greater than)' },
+                                              { value: '<', label: '< (less than)' },
+                                              { value: '==', label: '== (equal)' },
+                                              { value: '!=', label: '!= (not equal)' }
+                                            ]}
+                                          />
+                                          <NumberInput
+                                            label=""
+                                            value={currentFilter?.value as number || attr.min || 0}
+                                            onChange={(value) => 
+                                              updateJsonFilter(i, attr.name, { value })
+                                            }
+                                            placeholder={`Range: ${attr.min}-${attr.max}`}
+                                          />
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center space-x-2">
+                                          <SelectInput
+                                            label=""
+                                            value={currentFilter?.operator || '=='}
+                                            onChange={(operator) => 
+                                              updateJsonFilter(i, attr.name, { operator: operator as any })
+                                            }
+                                            options={[
+                                              { value: '==', label: '== (equal)' },
+                                              { value: '!=', label: '!= (not equal)' }
+                                            ]}
+                                          />
+                                          <SelectInput
+                                            label=""
+                                            value={String(currentFilter?.value ?? true)}
+                                            onChange={(value) => 
+                                              updateJsonFilter(i, attr.name, { value: value === 'true' })
+                                            }
+                                            options={[
+                                              { value: 'true', label: 'true' },
+                                              { value: 'false', label: 'false' }
+                                            ]}
+                                          />
+                                        </div>
+                                      )}
+                                      {attr.uniqueValues.length > 0 && (
+                                        <div className="text-xs text-gray-500 mt-1">
+                                          Sample values: {attr.uniqueValues.slice(0, 5).map(v => String(v)).join(', ')}
+                                          {attr.uniqueValues.length > 5 && '...'}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      )}
                       {modelArch?.additionalSections?.includes('datasets.control_path') && (
                         <SelectInput
                           label="Control Dataset"

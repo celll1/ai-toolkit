@@ -70,6 +70,14 @@ export interface SaveConfig {
   push_to_hub: boolean;
 }
 
+export interface JsonFilter {
+  field: string;
+  type: 'number' | 'boolean';
+  enabled: boolean;
+  operator?: '>=' | '<=' | '>' | '<' | '==' | '!=';
+  value?: number | boolean;
+}
+
 export interface DatasetConfig {
   folder_path: string;
   mask_path: string | null;
@@ -98,6 +106,7 @@ export interface DatasetConfig {
   sample_size?: number;  // Number of images to sample from this dataset
   caption_format?: 'txt' | 'json';  // Caption format for this dataset
   json_attribute?: string;  // JSON attribute to extract for captions
+  json_filters?: JsonFilter[];  // JSON field filters for data sampling
 }
 
 export interface EMAConfig {
