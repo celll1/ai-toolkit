@@ -68,18 +68,26 @@ async function processJsonFiles(datasetName: string, controller: ReadableStreamD
       return;
     }
 
-    // Find JSON files
+    // Find JSON files and count total images
     const jsonFiles: string[] = [];
-    const findJsonFiles = (dir: string) => {
+    const imageFiles: string[] = [];
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'];
+    
+    const findFiles = (dir: string) => {
       try {
         const items = fs.readdirSync(dir);
         for (const item of items) {
           const fullPath = path.join(dir, item);
           const stat = fs.statSync(fullPath);
           if (stat.isDirectory()) {
-            findJsonFiles(fullPath);
-          } else if (item.toLowerCase().endsWith('.json')) {
-            jsonFiles.push(fullPath);
+            findFiles(fullPath);
+          } else {
+            const ext = path.extname(item).toLowerCase();
+            if (ext === '.json') {
+              jsonFiles.push(fullPath);
+            } else if (imageExtensions.includes(ext)) {
+              imageFiles.push(fullPath);
+            }
           }
         }
       } catch (error) {
@@ -87,11 +95,13 @@ async function processJsonFiles(datasetName: string, controller: ReadableStreamD
       }
     };
 
-    findJsonFiles(targetDir);
+    findFiles(targetDir);
 
-    const totalFiles = jsonFiles.length;
-    if (totalFiles === 0) {
-      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: 'No JSON files found' })}\n\n`));
+    const totalJsonFiles = jsonFiles.length;
+    const totalImages = imageFiles.length;
+    
+    if (totalImages === 0) {
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: 'No image files found' })}\n\n`));
       controller.close();
       return;
     }
@@ -99,8 +109,9 @@ async function processJsonFiles(datasetName: string, controller: ReadableStreamD
     // Send initial progress
     controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
       type: 'start', 
-      totalFiles,
-      message: `Starting analysis of ${totalFiles} JSON files...` 
+      totalFiles: totalJsonFiles,
+      totalImages,
+      message: `Starting analysis of ${totalJsonFiles} JSON files (${totalImages} total images)...` 
     })}\n\n`));
 
     // Analyze files with progress updates
@@ -143,7 +154,7 @@ async function processJsonFiles(datasetName: string, controller: ReadableStreamD
       }
     };
 
-    for (let i = 0; i < totalFiles; i++) {
+    for (let i = 0; i < totalJsonFiles; i++) {
       try {
         const jsonContent = fs.readFileSync(jsonFiles[i], 'utf-8');
         const jsonData = JSON.parse(jsonContent);
@@ -156,14 +167,14 @@ async function processJsonFiles(datasetName: string, controller: ReadableStreamD
         }
 
         // Send progress updates every 100 files or at the end
-        if ((i + 1) % 100 === 0 || i === totalFiles - 1) {
-          const progress = Math.round(((i + 1) / totalFiles) * 100);
+        if ((i + 1) % 100 === 0 || i === totalJsonFiles - 1) {
+          const progress = Math.round(((i + 1) / totalJsonFiles) * 100);
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
             type: 'progress', 
             current: i + 1,
-            total: totalFiles,
+            total: totalJsonFiles,
             percentage: progress,
-            message: `Processed ${i + 1}/${totalFiles} files (${progress}%)`
+            message: `Processed ${i + 1}/${totalJsonFiles} JSON files (${progress}%)`
           })}\n\n`));
         }
       } catch (error) {
@@ -171,13 +182,13 @@ async function processJsonFiles(datasetName: string, controller: ReadableStreamD
       }
     }
 
-    // Prepare results
+    // Prepare results - calculate percentage based on total images, not just JSON files
     const availableAttributes = Object.keys(attributeFrequency)
       .map(attr => ({
         name: attr,
         type: attributeTypes[attr]?.type || 'unknown',
         frequency: attributeFrequency[attr],
-        percentage: Math.round((attributeFrequency[attr] / totalFiles) * 100),
+        percentage: Math.round((attributeFrequency[attr] / totalImages) * 100),
         min: attributeTypes[attr]?.min,
         max: attributeTypes[attr]?.max,
         uniqueValues: Array.from(attributeTypes[attr]?.values || []).slice(0, 10)
@@ -200,8 +211,10 @@ async function processJsonFiles(datasetName: string, controller: ReadableStreamD
     controller.enqueue(encoder.encode(`data: ${JSON.stringify({ 
       type: 'complete',
       availableAttributes,
-      totalJsonFiles: totalFiles,
-      processedFiles: totalFiles,
+      totalJsonFiles,
+      totalImages,
+      processedFiles: totalJsonFiles,
+      missingJsonFiles: totalImages - totalJsonFiles,
       sampleData
     })}\n\n`));
 

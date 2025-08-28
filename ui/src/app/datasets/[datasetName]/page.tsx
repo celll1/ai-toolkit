@@ -84,11 +84,15 @@ export default function DatasetPage({ params }: { params: { datasetName: string 
             setJsonAttribute(data.availableAttributes[0].name);
           }
           
+          const missingMsg = data.missingJsonFiles > 0 
+            ? ` (${data.missingJsonFiles} images without JSON)` 
+            : '';
+          
           setAnalysisProgress({
             current: data.processedFiles,
             total: data.processedFiles,
             percentage: 100,
-            message: `Analysis complete! Found ${data.availableAttributes.length} unique attributes.`
+            message: `Analysis complete! Found ${data.availableAttributes.length} unique attributes${missingMsg}.`
           });
           
           eventSource.close();
@@ -307,7 +311,7 @@ export default function DatasetPage({ params }: { params: { datasetName: string 
                     <div className="font-semibold mb-1">Found attributes:</div>
                     {availableAttributes.slice(0, 5).map(attr => (
                       <div key={attr.name} className="text-xs">
-                        • {attr.name}: {attr.frequency} files ({attr.percentage}%)
+                        • {attr.name}: {attr.frequency} files ({attr.percentage}% of all images)
                       </div>
                     ))}
                   </div>

@@ -117,6 +117,10 @@ export default function SimpleJob({
             [datasetName]: data.availableAttributes || []
           }));
           
+          const missingMsg = data.missingJsonFiles > 0 
+            ? ` (${data.missingJsonFiles} images without JSON)` 
+            : '';
+          
           setAnalyzingDatasets(prev => ({
             ...prev,
             [datasetName]: {
@@ -125,7 +129,7 @@ export default function SimpleJob({
                 current: data.processedFiles,
                 total: data.processedFiles,
                 percentage: 100,
-                message: `Analysis complete! Found ${data.availableAttributes.length} attributes.`
+                message: `Analysis complete! Found ${data.availableAttributes.length} attributes${missingMsg}.`
               }
             }
           }));
@@ -916,7 +920,7 @@ export default function SimpleJob({
                                         {attr.name} ({attr.type})
                                       </span>
                                       <span className="text-xs text-gray-500">
-                                        {attr.percentage}% of files
+                                        {attr.percentage}% of all images
                                       </span>
                                     </div>
                                     {isEnabled && (
@@ -1066,7 +1070,7 @@ export default function SimpleJob({
                             if (attributes && attributes.length > 0) {
                               return attributes.map(attr => ({
                                 value: attr.name,
-                                label: `${attr.name} (${attr.percentage}% of files)`
+                                label: `${attr.name} (${attr.percentage}% of all images)`
                               }));
                             } else {
                               // Fallback to default options if no attributes found

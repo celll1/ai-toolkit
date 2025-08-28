@@ -32,18 +32,26 @@ export async function GET(
       targetDir = dataset.external_path;
     }
 
-    // Find JSON files in the dataset
+    // Find JSON files and image files in the dataset
     const jsonFiles: string[] = [];
-    const findJsonFiles = (dir: string) => {
+    const imageFiles: string[] = [];
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'];
+    
+    const findFiles = (dir: string) => {
       try {
         const items = fs.readdirSync(dir);
         for (const item of items) {
           const fullPath = path.join(dir, item);
           const stat = fs.statSync(fullPath);
           if (stat.isDirectory()) {
-            findJsonFiles(fullPath);
-          } else if (item.toLowerCase().endsWith('.json')) {
-            jsonFiles.push(fullPath);
+            findFiles(fullPath);
+          } else {
+            const ext = path.extname(item).toLowerCase();
+            if (ext === '.json') {
+              jsonFiles.push(fullPath);
+            } else if (imageExtensions.includes(ext)) {
+              imageFiles.push(fullPath);
+            }
           }
         }
       } catch (error) {
@@ -67,13 +75,14 @@ export async function GET(
       });
     }
 
-    findJsonFiles(targetDir);
+    findFiles(targetDir);
 
     // Analyze ALL JSON files to find accurate attribute frequencies
     const attributeFrequency: { [key: string]: number } = {};
     const attributeTypes: { [key: string]: { type: string, values: Set<any>, min?: number, max?: number } } = {};
     const sampleData: any[] = [];
-    const totalFiles = jsonFiles.length;
+    const totalJsonFiles = jsonFiles.length;
+    const totalImages = imageFiles.length;
 
     // Helper function to analyze nested objects
     const analyzeNestedObject = (obj: any, prefix: string = '') => {
@@ -111,7 +120,7 @@ export async function GET(
     };
 
     // Process all JSON files for accurate statistics
-    for (let i = 0; i < totalFiles; i++) {
+    for (let i = 0; i < totalJsonFiles; i++) {
       try {
         const jsonContent = fs.readFileSync(jsonFiles[i], 'utf-8');
         const jsonData = JSON.parse(jsonContent);
@@ -129,12 +138,13 @@ export async function GET(
     }
 
     // Sort attributes by frequency (most common first)
+    // Calculate percentage based on total images, not just JSON files
     const availableAttributes = Object.keys(attributeFrequency)
       .map(attr => ({
         name: attr,
         type: attributeTypes[attr]?.type || 'unknown',
         frequency: attributeFrequency[attr],
-        percentage: Math.round((attributeFrequency[attr] / totalFiles) * 100),
+        percentage: Math.round((attributeFrequency[attr] / totalImages) * 100),
         min: attributeTypes[attr]?.min,
         max: attributeTypes[attr]?.max,
         uniqueValues: Array.from(attributeTypes[attr]?.values || []).slice(0, 10) // Limit to 10 unique values for display
@@ -155,8 +165,10 @@ export async function GET(
 
     return NextResponse.json({
       availableAttributes,
-      totalJsonFiles: jsonFiles.length,
-      processedFiles: totalFiles,
+      totalJsonFiles,
+      totalImages,
+      processedFiles: totalJsonFiles,
+      missingJsonFiles: totalImages - totalJsonFiles,
       sampleData: sampleData // Already limited to first 3 samples
     });
 
