@@ -1070,6 +1070,13 @@ export default function SimpleJob({
                             const datasetName = dataset.folder_path.split(/[/\\]/).pop();
                             if (datasetName) {
                               fetchDatasetAttributes(datasetName);
+                              // If we already have attributes and no json_attribute set, auto-set it
+                              const existingAttributes = datasetAttributes[datasetName];
+                              if (existingAttributes && existingAttributes.length > 0 && !dataset.json_attribute) {
+                                setTimeout(() => {
+                                  setJobConfig(existingAttributes[0].name, `config.process[0].datasets[${i}].json_attribute`);
+                                }, 0);
+                              }
                             }
                           }
                         }}
@@ -1086,13 +1093,27 @@ export default function SimpleJob({
                             const datasetName = dataset.folder_path.split(/[/\\]/).pop();
                             const attributes = datasetName ? datasetAttributes[datasetName] : [];
                             
-                            // If we have analyzed attributes and no value is set, use the most common one
+                            // If we have analyzed attributes and no value is set, auto-set and return the most common one
                             if (!dataset.json_attribute && attributes && attributes.length > 0) {
-                              return attributes[0].name; // Most common attribute (already sorted by frequency)
+                              // Auto-set the most common attribute
+                              setTimeout(() => {
+                                setJobConfig(attributes[0].name, `config.process[0].datasets[${i}].json_attribute`);
+                              }, 0);
+                              return attributes[0].name;
                             }
                             
-                            // Return the set value or fallback to 'tags'
-                            return dataset.json_attribute || 'tags';
+                            // If we have a set value, return it
+                            if (dataset.json_attribute) {
+                              return dataset.json_attribute;
+                            }
+                            
+                            // If we have attributes but no selection, show the most common
+                            if (attributes && attributes.length > 0) {
+                              return attributes[0].name;
+                            }
+                            
+                            // Final fallback
+                            return 'tags';
                           })()}
                           onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].json_attribute`)}
                           options={(() => {
