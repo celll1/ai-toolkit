@@ -1,5 +1,5 @@
 'use client';
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { modelArchs, ModelArch, groupedModelOptions, quantizationOptions, defaultQtype } from './options';
 import { defaultDatasetConfig } from './jobConfig';
 import { GroupedSelectOption, JobConfig, SelectOption } from '@/types';
@@ -42,8 +42,47 @@ export default function SimpleJob({
 
   const isVideoModel = !!(modelArch?.group === 'video');
   
+  // State for dataset attributes
+  const [datasetAttributes, setDatasetAttributes] = useState<{[datasetName: string]: Array<{name: string, frequency: number, percentage: number}>}>({});
+  
   // Get dataset information including image counts
   const { datasets: datasetInfo } = useDatasetList();
+  
+  // Function to fetch dataset attributes
+  const fetchDatasetAttributes = async (datasetName: string) => {
+    if (!datasetName || datasetAttributes[datasetName]) {
+      return; // Already loaded or invalid dataset name
+    }
+    
+    try {
+      const response = await apiClient.get(`/api/datasets/${datasetName}/attributes`);
+      const data = response.data;
+      if (data.availableAttributes && data.availableAttributes.length > 0) {
+        setDatasetAttributes(prev => ({
+          ...prev,
+          [datasetName]: data.availableAttributes
+        }));
+      }
+    } catch (error) {
+      console.error(`Error fetching attributes for dataset ${datasetName}:`, error);
+    }
+  };
+  
+  // Load dataset attributes for existing JSON datasets on component mount
+  useEffect(() => {
+    const loadExistingAttributes = async () => {
+      for (const dataset of jobConfig.config.process[0].datasets) {
+        if (dataset.caption_format === 'json') {
+          const datasetName = dataset.folder_path.split(/[/\\]/).pop();
+          if (datasetName) {
+            await fetchDatasetAttributes(datasetName);
+          }
+        }
+      }
+    };
+    
+    loadExistingAttributes();
+  }, [jobConfig.config.process[0].datasets]);
   
   // Function to add random prompt from dataset
   const addRandomPromptFromDataset = async () => {
@@ -697,7 +736,16 @@ export default function SimpleJob({
                         label="Caption Format"
                         className="pt-2"
                         value={dataset.caption_format || 'txt'}
-                        onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].caption_format`)}
+                        onChange={value => {
+                          setJobConfig(value, `config.process[0].datasets[${i}].caption_format`);
+                          // Fetch attributes when JSON is selected
+                          if (value === 'json') {
+                            const datasetName = dataset.folder_path.split(/[/\\]/).pop();
+                            if (datasetName) {
+                              fetchDatasetAttributes(datasetName);
+                            }
+                          }
+                        }}
                         options={[
                           { value: 'txt', label: 'Text files (.txt)' },
                           { value: 'json', label: 'JSON files (.json)' }
@@ -709,13 +757,26 @@ export default function SimpleJob({
                           className="pt-2"
                           value={dataset.json_attribute || 'tags'}
                           onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].json_attribute`)}
-                          options={[
-                            { value: 'tags', label: 'tags' },
-                            { value: 'text', label: 'text' },
-                            { value: 'caption', label: 'caption' },
-                            { value: 'description', label: 'description' },
-                            { value: 'prompt', label: 'prompt' }
-                          ]}
+                          options={(() => {
+                            const datasetName = dataset.folder_path.split(/[/\\]/).pop();
+                            const attributes = datasetName ? datasetAttributes[datasetName] : [];
+                            
+                            if (attributes && attributes.length > 0) {
+                              return attributes.map(attr => ({
+                                value: attr.name,
+                                label: `${attr.name} (${attr.percentage}% of files)`
+                              }));
+                            } else {
+                              // Fallback to default options if no attributes found
+                              return [
+                                { value: 'tags', label: 'tags' },
+                                { value: 'text', label: 'text' },
+                                { value: 'caption', label: 'caption' },
+                                { value: 'description', label: 'description' },
+                                { value: 'prompt', label: 'prompt' }
+                              ];
+                            }
+                          })()}
                         />
                       )}
                       {modelArch?.additionalSections?.includes('datasets.num_frames') && (

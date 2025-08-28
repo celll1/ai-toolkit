@@ -44,6 +44,7 @@ model Dataset {
   external_path String? // Path to external dataset (only for linked datasets)
   caption_format String @default("txt") // "txt" or "json"
   json_attribute String @default("tags") // JSON attribute to use for captions
+  available_attributes String? // JSON string of available attributes with frequency data
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 }

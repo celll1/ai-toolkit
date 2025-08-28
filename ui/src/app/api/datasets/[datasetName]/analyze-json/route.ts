@@ -103,6 +103,18 @@ export async function GET(
       }))
       .sort((a, b) => b.frequency - a.frequency);
 
+    // Save the analyzed attributes to the database for future use
+    try {
+      await prisma.dataset.update({
+        where: { name: datasetName },
+        data: {
+          available_attributes: availableAttributes.length > 0 ? JSON.stringify(availableAttributes) : null,
+        },
+      });
+    } catch (error) {
+      console.error('Error saving available attributes to database:', error);
+    }
+
     return NextResponse.json({
       availableAttributes,
       totalJsonFiles: jsonFiles.length,
