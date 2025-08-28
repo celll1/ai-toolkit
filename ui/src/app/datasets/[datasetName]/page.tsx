@@ -22,6 +22,9 @@ export default function DatasetPage({ params }: { params: { datasetName: string 
   const [jsonAttribute, setJsonAttribute] = useState<string>('tags');
   const [availableAttributes, setAvailableAttributes] = useState<Array<{name: string, frequency: number, percentage: number}>>([]);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [analysisProgress, setAnalysisProgress] = useState<{current: number, total: number, percentage: number, message: string}>({
+    current: 0, total: 0, percentage: 0, message: ''
+  });
 
   const checkDatasetType = async (dbName: string) => {
     try {
@@ -50,20 +53,81 @@ export default function DatasetPage({ params }: { params: { datasetName: string 
   const analyzeJsonAttributes = async () => {
     if (!datasetName) return;
     setIsAnalyzing(true);
+    setAnalysisProgress({ current: 0, total: 0, percentage: 0, message: 'Starting analysis...' });
+    
     try {
-      const response = await apiClient.get(`/api/datasets/${datasetName}/analyze-json`);
-      const data = response.data;
-      setAvailableAttributes(data.availableAttributes || []);
+      // Use EventSource for Server-Sent Events to track progress
+      const eventSource = new EventSource(`/api/datasets/${datasetName}/analyze-json-progress`);
       
-      // Auto-select the most common attribute if we haven't set one yet
-      if (data.availableAttributes && data.availableAttributes.length > 0 && jsonAttribute === 'tags') {
-        setJsonAttribute(data.availableAttributes[0].name);
-      }
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'start') {
+          setAnalysisProgress({
+            current: 0,
+            total: data.totalFiles,
+            percentage: 0,
+            message: data.message
+          });
+        } else if (data.type === 'progress') {
+          setAnalysisProgress({
+            current: data.current,
+            total: data.total,
+            percentage: data.percentage,
+            message: data.message
+          });
+        } else if (data.type === 'complete') {
+          setAvailableAttributes(data.availableAttributes || []);
+          
+          // Auto-select the most common attribute if we haven't set one yet
+          if (data.availableAttributes && data.availableAttributes.length > 0 && jsonAttribute === 'tags') {
+            setJsonAttribute(data.availableAttributes[0].name);
+          }
+          
+          setAnalysisProgress({
+            current: data.processedFiles,
+            total: data.processedFiles,
+            percentage: 100,
+            message: `Analysis complete! Found ${data.availableAttributes.length} unique attributes.`
+          });
+          
+          eventSource.close();
+          setIsAnalyzing(false);
+        } else if (data.type === 'error') {
+          console.error('Analysis error:', data.error);
+          setAnalysisProgress({
+            current: 0,
+            total: 0,
+            percentage: 0,
+            message: `Error: ${data.error}`
+          });
+          eventSource.close();
+          setIsAnalyzing(false);
+        }
+      };
+      
+      eventSource.onerror = (error) => {
+        console.error('EventSource error:', error);
+        eventSource.close();
+        setIsAnalyzing(false);
+        setAnalysisProgress({
+          current: 0,
+          total: 0,
+          percentage: 0,
+          message: 'Connection error occurred during analysis.'
+        });
+      };
+      
     } catch (error) {
-      console.error('Error analyzing JSON attributes:', error);
+      console.error('Error starting JSON analysis:', error);
       setAvailableAttributes([]);
-    } finally {
       setIsAnalyzing(false);
+      setAnalysisProgress({
+        current: 0,
+        total: 0,
+        percentage: 0,
+        message: 'Failed to start analysis.'
+      });
     }
   };
 
@@ -211,14 +275,31 @@ export default function DatasetPage({ params }: { params: { datasetName: string 
                           ]
                     }
                   />
-                  <button
-                    type="button"
-                    className="mt-6 px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
-                    onClick={analyzeJsonAttributes}
-                    disabled={isAnalyzing}
-                  >
-                    {isAnalyzing ? 'Analyzing...' : 'Analyze'}
-                  </button>
+                  <div className="mt-6">
+                    <button
+                      type="button"
+                      className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
+                      onClick={analyzeJsonAttributes}
+                      disabled={isAnalyzing}
+                    >
+                      {isAnalyzing ? 'Analyzing...' : 'Analyze All Files'}
+                    </button>
+                    
+                    {isAnalyzing && analysisProgress.total > 0 && (
+                      <div className="mt-2">
+                        <div className="flex justify-between text-xs text-gray-400 mb-1">
+                          <span>{analysisProgress.message}</span>
+                          <span>{analysisProgress.percentage}%</span>
+                        </div>
+                        <div className="w-full bg-gray-700 rounded-full h-2">
+                          <div 
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${analysisProgress.percentage}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 
                 {availableAttributes.length > 0 && (

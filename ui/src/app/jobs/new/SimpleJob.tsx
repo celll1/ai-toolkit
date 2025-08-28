@@ -43,17 +43,19 @@ export default function SimpleJob({
   const isVideoModel = !!(modelArch?.group === 'video');
   
   // State for dataset attributes
-  const [datasetAttributes, setDatasetAttributes] = useState<{[datasetName: string]: Array<{name: string, frequency: number, percentage: number}>}>({});
+  const [datasetAttributes, setDatasetAttributes] = useState<{[datasetName: string]: Array<{name: string, frequency: number, percentage: number, type: string, min?: number, max?: number}>}>({});
+  const [analyzingDatasets, setAnalyzingDatasets] = useState<{[datasetName: string]: {analyzing: boolean, progress: {current: number, total: number, percentage: number, message: string}}}> ({});
   
   // Get dataset information including image counts
   const { datasets: datasetInfo } = useDatasetList();
   
-  // Function to fetch dataset attributes
+  // Function to fetch dataset attributes with progress
   const fetchDatasetAttributes = async (datasetName: string) => {
-    if (!datasetName || datasetAttributes[datasetName]) {
-      return; // Already loaded or invalid dataset name
+    if (!datasetName || datasetAttributes[datasetName] || analyzingDatasets[datasetName]?.analyzing) {
+      return; // Already loaded, invalid dataset name, or currently analyzing
     }
     
+    // First try to get cached attributes
     try {
       const response = await apiClient.get(`/api/datasets/${datasetName}/attributes`);
       const data = response.data;
@@ -62,9 +64,107 @@ export default function SimpleJob({
           ...prev,
           [datasetName]: data.availableAttributes
         }));
+        return; // Got cached attributes, no need to analyze
       }
     } catch (error) {
-      console.error(`Error fetching attributes for dataset ${datasetName}:`, error);
+      console.error(`Error fetching cached attributes for dataset ${datasetName}:`, error);
+    }
+    
+    // No cached attributes, start full analysis with progress
+    setAnalyzingDatasets(prev => ({
+      ...prev,
+      [datasetName]: {
+        analyzing: true,
+        progress: { current: 0, total: 0, percentage: 0, message: 'Starting analysis...' }
+      }
+    }));
+    
+    try {
+      const eventSource = new EventSource(`/api/datasets/${datasetName}/analyze-json-progress`);
+      
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'start') {
+          setAnalyzingDatasets(prev => ({
+            ...prev,
+            [datasetName]: {
+              analyzing: true,
+              progress: {
+                current: 0,
+                total: data.totalFiles,
+                percentage: 0,
+                message: data.message
+              }
+            }
+          }));
+        } else if (data.type === 'progress') {
+          setAnalyzingDatasets(prev => ({
+            ...prev,
+            [datasetName]: {
+              analyzing: true,
+              progress: {
+                current: data.current,
+                total: data.total,
+                percentage: data.percentage,
+                message: data.message
+              }
+            }
+          }));
+        } else if (data.type === 'complete') {
+          setDatasetAttributes(prev => ({
+            ...prev,
+            [datasetName]: data.availableAttributes || []
+          }));
+          
+          setAnalyzingDatasets(prev => ({
+            ...prev,
+            [datasetName]: {
+              analyzing: false,
+              progress: {
+                current: data.processedFiles,
+                total: data.processedFiles,
+                percentage: 100,
+                message: `Analysis complete! Found ${data.availableAttributes.length} attributes.`
+              }
+            }
+          }));
+          
+          eventSource.close();
+        } else if (data.type === 'error') {
+          console.error('Analysis error:', data.error);
+          setAnalyzingDatasets(prev => ({
+            ...prev,
+            [datasetName]: {
+              analyzing: false,
+              progress: { current: 0, total: 0, percentage: 0, message: `Error: ${data.error}` }
+            }
+          }));
+          eventSource.close();
+        }
+      };
+      
+      eventSource.onerror = (error) => {
+        console.error('EventSource error:', error);
+        eventSource.close();
+        setAnalyzingDatasets(prev => ({
+          ...prev,
+          [datasetName]: {
+            analyzing: false,
+            progress: { current: 0, total: 0, percentage: 0, message: 'Connection error occurred.' }
+          }
+        }));
+      };
+      
+    } catch (error) {
+      console.error(`Error starting JSON analysis for dataset ${datasetName}:`, error);
+      setAnalyzingDatasets(prev => ({
+        ...prev,
+        [datasetName]: {
+          analyzing: false,
+          progress: { current: 0, total: 0, percentage: 0, message: 'Failed to start analysis.' }
+        }
+      }));
     }
   };
   
@@ -733,13 +833,55 @@ export default function SimpleJob({
                       {/* JSON Filters Section */}
                       {dataset.caption_format === 'json' && (
                         <div className="pt-4 border-t border-gray-700">
-                          <h4 className="text-sm font-semibold text-gray-200 mb-2">JSON Field Filters</h4>
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-sm font-semibold text-gray-200">JSON Field Filters</h4>
+                            {(() => {
+                              const datasetName = dataset.folder_path.split(/[/\\]/).pop();
+                              const analyzing = datasetName ? analyzingDatasets[datasetName]?.analyzing : false;
+                              
+                              return (
+                                <button
+                                  type="button"
+                                  className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
+                                  onClick={() => {
+                                    if (datasetName) {
+                                      fetchDatasetAttributes(datasetName);
+                                    }
+                                  }}
+                                  disabled={analyzing}
+                                >
+                                  {analyzing ? 'Analyzing...' : 'Analyze Fields'}
+                                </button>
+                              );
+                            })()}
+                          </div>
                           <div className="text-xs text-gray-400 mb-3">
                             Filter dataset samples based on JSON field values. Only samples matching all enabled filters will be included.
                           </div>
                           
                           {(() => {
                             const datasetName = dataset.folder_path.split(/[/\\]/).pop();
+                            const analyzing = datasetName ? analyzingDatasets[datasetName]?.analyzing : false;
+                            const progress = datasetName ? analyzingDatasets[datasetName]?.progress : null;
+                            
+                            // Show progress bar if analyzing
+                            if (analyzing && progress && progress.total > 0) {
+                              return (
+                                <div className="mb-4">
+                                  <div className="flex justify-between text-xs text-gray-400 mb-1">
+                                    <span>{progress.message}</span>
+                                    <span>{progress.percentage}%</span>
+                                  </div>
+                                  <div className="w-full bg-gray-700 rounded-full h-2">
+                                    <div 
+                                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                      style={{ width: `${progress.percentage}%` }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            
                             const attributes = datasetName ? datasetAttributes[datasetName] || [] : [];
                             const numericAndBooleanFields = attributes.filter(attr => attr.type === 'number' || attr.type === 'boolean');
                             
@@ -747,7 +889,7 @@ export default function SimpleJob({
                               return (
                                 <div className="text-xs text-gray-500 italic">
                                   No numeric or boolean fields found for filtering. 
-                                  {attributes.length === 0 ? ' Click "Analyze" above to detect available fields.' : ''}
+                                  {attributes.length === 0 ? ' Click "Analyze Fields" above to detect available fields.' : ''}
                                 </div>
                               );
                             }
