@@ -132,16 +132,27 @@ class CaptionMixin:
             raise Exception('file_list not found on class instance')
         img_path_or_tuple = self.file_list[index]
         ext = self.dataset_config.caption_ext
+        caption_format = getattr(self.dataset_config, 'caption_format', 'txt')
+        
         if isinstance(img_path_or_tuple, tuple):
             img_path = img_path_or_tuple[0] if isinstance(img_path_or_tuple[0], str) else img_path_or_tuple[0].path
             # check if either has a prompt file
             path_no_ext = os.path.splitext(img_path)[0]
             prompt_path = None
-            prompt_path = path_no_ext + ext
         else:
             img_path = img_path_or_tuple if isinstance(img_path_or_tuple, str) else img_path_or_tuple.path
             # see if prompt file exists
             path_no_ext = os.path.splitext(img_path)[0]
+        
+        # Try JSON format first if configured, then fallback to txt
+        prompt_path = None
+        if caption_format == 'json':
+            json_path = path_no_ext + '.json'
+            if os.path.exists(json_path):
+                prompt_path = json_path
+        
+        # Fallback to configured extension if JSON not found
+        if prompt_path is None:
             prompt_path = path_no_ext + ext
                 
         # allow folders to have a default prompt
@@ -154,8 +165,30 @@ class CaptionMixin:
                 # check if is json
                 if prompt_path.endswith('.json'):
                     prompt = json.loads(prompt)
-                    if 'caption' in prompt:
+                    
+                    # Use configured JSON attribute if available, otherwise fallback to 'caption'
+                    json_attribute = getattr(self.dataset_config, 'json_attribute', 'tags')
+                    
+                    if json_attribute in prompt:
+                        prompt = prompt[json_attribute]
+                    elif 'caption' in prompt:
                         prompt = prompt['caption']
+                    elif 'tags' in prompt:
+                        prompt = prompt['tags']
+                    elif 'text' in prompt:
+                        prompt = prompt['text']
+                    elif 'description' in prompt:
+                        prompt = prompt['description']
+                    elif 'prompt' in prompt:
+                        prompt = prompt['prompt']
+                    else:
+                        # If none of the common attributes exist, use the first string value
+                        for key, value in prompt.items():
+                            if isinstance(value, str) and value.strip():
+                                prompt = value
+                                break
+                        else:
+                            prompt = ''
 
                 prompt = clean_caption(prompt)
         elif os.path.exists(default_prompt_path_with_ext):

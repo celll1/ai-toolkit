@@ -21,6 +21,8 @@ export const defaultDatasetConfig: DatasetConfig = {
   shrink_video_to_frames: true,
   num_frames: 1,
   do_i2v: true,
+  caption_format: 'txt',
+  json_attribute: 'tags',
 };
 
 export const defaultJobConfig: JobConfig = {

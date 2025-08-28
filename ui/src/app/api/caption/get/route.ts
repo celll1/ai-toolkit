@@ -10,15 +10,65 @@ const prisma = new PrismaClient();
 export async function POST(request: NextRequest) {
   
   const body = await request.json();
-  const { imgPath } = body;
+  const { imgPath, datasetName } = body;
   console.log('Received POST request for caption:', imgPath);
   try {
     // Decode the path
     const filepath = imgPath;
     console.log('Decoded image path:', filepath);
 
-    // caption name is the filepath without extension but with .txt
-    const captionPath = filepath.replace(/\.[^/.]+$/, '') + '.txt';
+    // Get dataset configuration for caption format
+    let captionFormat = 'txt';
+    let jsonAttribute = 'tags';
+    
+    if (datasetName) {
+      try {
+        const dataset = await prisma.dataset.findUnique({
+          where: { name: datasetName }
+        });
+        if (dataset) {
+          captionFormat = dataset.caption_format;
+          jsonAttribute = dataset.json_attribute;
+        }
+      } catch (error) {
+        console.error('Error fetching dataset config:', error);
+      }
+    }
+
+    // Try JSON format first if configured, then fallback to txt
+    let captionContent = '';
+    
+    if (captionFormat === 'json') {
+      const jsonPath = filepath.replace(/\.[^/.]+$/, '') + '.json';
+      if (fs.existsSync(jsonPath)) {
+        try {
+          const jsonContent = fs.readFileSync(jsonPath, 'utf-8');
+          const jsonData = JSON.parse(jsonContent);
+          captionContent = jsonData[jsonAttribute] || '';
+          
+          // If the specified attribute doesn't exist, try common alternatives
+          if (!captionContent) {
+            const alternatives = ['tags', 'text', 'caption', 'description', 'prompt'];
+            for (const alt of alternatives) {
+              if (jsonData[alt]) {
+                captionContent = jsonData[alt];
+                break;
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error parsing JSON caption:', error);
+        }
+      }
+    }
+    
+    // Fallback to txt format if JSON didn't work or wasn't found
+    if (!captionContent) {
+      const txtPath = filepath.replace(/\.[^/.]+$/, '') + '.txt';
+      if (fs.existsSync(txtPath)) {
+        captionContent = fs.readFileSync(txtPath, 'utf-8');
+      }
+    }
 
     // Get allowed directories
     const datasetRoot = await getDatasetsRoot();
@@ -47,17 +97,8 @@ export async function POST(request: NextRequest) {
       return new NextResponse('Access denied', { status: 403 });
     }
 
-    // Check if file exists
-    if (!fs.existsSync(captionPath)) {
-      // send back blank string if caption file does not exist
-      return new NextResponse('');
-    }
-
-    // Read caption file
-    const caption = fs.readFileSync(captionPath, 'utf-8');
-
-    // Return caption
-    return new NextResponse(caption);
+    // Return caption content (may be empty if no caption file found)
+    return new NextResponse(captionContent);
   } catch (error) {
     console.error('Error getting caption:', error);
     return new NextResponse('Error getting caption', { status: 500 });

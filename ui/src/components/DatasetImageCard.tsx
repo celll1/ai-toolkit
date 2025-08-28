@@ -12,6 +12,7 @@ interface DatasetImageCardProps {
   className?: string;
   onDelete?: () => void;
   isFromLinkedDataset?: boolean;
+  datasetName?: string;
 }
 
 const DatasetImageCard: React.FC<DatasetImageCardProps> = ({
@@ -21,6 +22,7 @@ const DatasetImageCard: React.FC<DatasetImageCardProps> = ({
   className = '',
   onDelete = () => {},
   isFromLinkedDataset = false,
+  datasetName,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState<boolean>(false);
@@ -35,7 +37,7 @@ const DatasetImageCard: React.FC<DatasetImageCardProps> = ({
     if (isGettingCaption.current || isCaptionLoaded) return;
     isGettingCaption.current = true;
     apiClient
-      .post(`/api/caption/get`, { imgPath: imageUrl })
+      .post(`/api/caption/get`, { imgPath: imageUrl, datasetName })
       .then(res => res.data)
       .then(data => {
         console.log('Caption fetched:', data);

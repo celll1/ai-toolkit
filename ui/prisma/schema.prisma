@@ -42,6 +42,8 @@ model Dataset {
   name        String   @unique
   type        String   @default("local") // "local" or "linked"
   external_path String? // Path to external dataset (only for linked datasets)
+  caption_format String @default("txt") // "txt" or "json"
+  json_attribute String @default("tags") // JSON attribute to use for captions
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 }

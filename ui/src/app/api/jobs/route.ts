@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
+import path from 'path';
 
 const prisma = new PrismaClient();
 
@@ -25,10 +26,51 @@ export async function GET(request: Request) {
   }
 }
 
+// Helper function to enrich dataset configurations with database settings
+async function enrichDatasetConfigurations(datasets: any[]) {
+  const enrichedDatasets = [];
+  
+  for (const dataset of datasets) {
+    const enrichedDataset = { ...dataset };
+    
+    // Extract dataset name from folder path
+    const datasetName = dataset.folder_path.split(/[/\\]/).pop();
+    
+    if (datasetName) {
+      try {
+        // Fetch dataset configuration from database
+        const dbDataset = await prisma.dataset.findUnique({
+          where: { name: datasetName }
+        });
+        
+        if (dbDataset) {
+          // Merge database configuration into dataset config
+          enrichedDataset.caption_format = dbDataset.caption_format || 'txt';
+          enrichedDataset.json_attribute = dbDataset.json_attribute || 'tags';
+        }
+      } catch (error) {
+        console.error(`Error enriching dataset config for ${datasetName}:`, error);
+        // Continue with default values if database lookup fails
+      }
+    }
+    
+    enrichedDatasets.push(enrichedDataset);
+  }
+  
+  return enrichedDatasets;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { id, name, job_config, gpu_ids } = body;
+
+    // Enrich dataset configurations with database settings
+    if (job_config?.config?.process?.[0]?.datasets) {
+      job_config.config.process[0].datasets = await enrichDatasetConfigurations(
+        job_config.config.process[0].datasets
+      );
+    }
 
     if (id) {
       // Update existing training

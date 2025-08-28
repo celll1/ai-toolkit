@@ -96,6 +96,8 @@ export interface DatasetConfig {
   shrink_video_to_frames: boolean;
   do_i2v: boolean;
   sample_size?: number;  // Number of images to sample from this dataset
+  caption_format?: 'txt' | 'json';  // Caption format for this dataset
+  json_attribute?: string;  // JSON attribute to extract for captions
 }
 
 export interface EMAConfig {
