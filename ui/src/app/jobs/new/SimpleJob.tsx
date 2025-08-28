@@ -64,6 +64,16 @@ export default function SimpleJob({
           ...prev,
           [datasetName]: data.availableAttributes
         }));
+        
+        // Auto-set json_attribute if not already set and we have attributes
+        const currentDataset = jobConfig.config.process[0].datasets.find(d => 
+          d.folder_path.split(/[/\\]/).pop() === datasetName
+        );
+        if (currentDataset && !currentDataset.json_attribute) {
+          const datasetIndex = jobConfig.config.process[0].datasets.indexOf(currentDataset);
+          setJobConfig(data.availableAttributes[0].name, `config.process[0].datasets[${datasetIndex}].json_attribute`);
+        }
+        
         return; // Got cached attributes, no need to analyze
       }
     } catch (error) {
@@ -116,6 +126,17 @@ export default function SimpleJob({
             ...prev,
             [datasetName]: data.availableAttributes || []
           }));
+          
+          // Auto-set json_attribute if not already set and we have attributes
+          if (data.availableAttributes && data.availableAttributes.length > 0) {
+            const currentDataset = jobConfig.config.process[0].datasets.find(d => 
+              d.folder_path.split(/[/\\]/).pop() === datasetName
+            );
+            if (currentDataset && !currentDataset.json_attribute) {
+              const datasetIndex = jobConfig.config.process[0].datasets.indexOf(currentDataset);
+              setJobConfig(data.availableAttributes[0].name, `config.process[0].datasets[${datasetIndex}].json_attribute`);
+            }
+          }
           
           const missingMsg = data.missingJsonFiles > 0 
             ? ` (${data.missingJsonFiles} images without JSON)` 
@@ -1061,7 +1082,18 @@ export default function SimpleJob({
                         <SelectInput
                           label="JSON Attribute"
                           className="pt-2"
-                          value={dataset.json_attribute || 'tags'}
+                          value={(() => {
+                            const datasetName = dataset.folder_path.split(/[/\\]/).pop();
+                            const attributes = datasetName ? datasetAttributes[datasetName] : [];
+                            
+                            // If we have analyzed attributes and no value is set, use the most common one
+                            if (!dataset.json_attribute && attributes && attributes.length > 0) {
+                              return attributes[0].name; // Most common attribute (already sorted by frequency)
+                            }
+                            
+                            // Return the set value or fallback to 'tags'
+                            return dataset.json_attribute || 'tags';
+                          })()}
                           onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].json_attribute`)}
                           options={(() => {
                             const datasetName = dataset.folder_path.split(/[/\\]/).pop();
