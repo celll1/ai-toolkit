@@ -13,6 +13,20 @@ export default function DatasetPage({ params }: { params: { datasetName: string 
   const usableParams = use(params as any) as { datasetName: string };
   const datasetName = usableParams.datasetName;
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [isLinkedDataset, setIsLinkedDataset] = useState<boolean>(false);
+
+  const checkDatasetType = async (dbName: string) => {
+    try {
+      const response = await apiClient.get('/api/datasets/list');
+      const datasets = response.data;
+      const dataset = datasets.find((d: any) => d.name === dbName);
+      if (dataset) {
+        setIsLinkedDataset(dataset.type === 'linked');
+      }
+    } catch (error) {
+      console.error('Error checking dataset type:', error);
+    }
+  };
 
   const refreshImageList = (dbName: string) => {
     setStatus('loading');
@@ -34,6 +48,7 @@ export default function DatasetPage({ params }: { params: { datasetName: string 
   };
   useEffect(() => {
     if (datasetName) {
+      checkDatasetType(datasetName);
       refreshImageList(datasetName);
     }
   }, [datasetName]);
@@ -51,14 +66,21 @@ export default function DatasetPage({ params }: { params: { datasetName: string 
           <h1 className="text-lg">Dataset: {datasetName}</h1>
         </div>
         <div className="flex-1"></div>
-        <div>
-          <Button
-            className="text-gray-200 bg-slate-600 px-3 py-1 rounded-md"
-            onClick={() => openImagesModal(datasetName, () => refreshImageList(datasetName))}
-          >
-            Add Images
-          </Button>
-        </div>
+        {!isLinkedDataset && (
+          <div>
+            <Button
+              className="text-gray-200 bg-slate-600 px-3 py-1 rounded-md"
+              onClick={() => openImagesModal(datasetName, () => refreshImageList(datasetName))}
+            >
+              Add Images
+            </Button>
+          </div>
+        )}
+        {isLinkedDataset && (
+          <div className="text-sm text-blue-400">
+            Linked Dataset (Read-only)
+          </div>
+        )}
       </TopBar>
       <MainContent>
         {status === 'loading' && <p>Loading...</p>}
@@ -72,6 +94,7 @@ export default function DatasetPage({ params }: { params: { datasetName: string 
                 alt="image"
                 imageUrl={img.img_path}
                 onDelete={() => refreshImageList(datasetName)}
+                isFromLinkedDataset={isLinkedDataset}
               />
             ))}
           </div>

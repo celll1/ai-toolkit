@@ -1,14 +1,35 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import { getDatasetsRoot } from '@/server/settings';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { imgPath, caption } = body;
     let datasetsPath = await getDatasetsRoot();
-    // make sure the dataset path is in the image path
-    if (!imgPath.startsWith(datasetsPath)) {
+    
+    // Check if the image path is in dataset root or external linked dataset paths
+    let isValidPath = imgPath.startsWith(datasetsPath);
+    
+    if (!isValidPath) {
+      // Check if it's from a linked dataset
+      try {
+        const linkedDatasets = await prisma.dataset.findMany({
+          where: { type: 'linked' }
+        });
+        
+        isValidPath = linkedDatasets.some(dataset => 
+          dataset.external_path && imgPath.startsWith(dataset.external_path)
+        );
+      } catch (error) {
+        console.error('Error checking linked datasets:', error);
+      }
+    }
+    
+    if (!isValidPath) {
       return NextResponse.json({ error: 'Invalid image path' }, { status: 400 });
     }
 

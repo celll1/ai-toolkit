@@ -11,6 +11,7 @@ interface DatasetImageCardProps {
   children?: ReactNode;
   className?: string;
   onDelete?: () => void;
+  isFromLinkedDataset?: boolean;
 }
 
 const DatasetImageCard: React.FC<DatasetImageCardProps> = ({
@@ -19,6 +20,7 @@ const DatasetImageCard: React.FC<DatasetImageCardProps> = ({
   children,
   className = '',
   onDelete = () => {},
+  isFromLinkedDataset = false,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState<boolean>(false);
@@ -159,32 +161,41 @@ const DatasetImageCard: React.FC<DatasetImageCardProps> = ({
             </div>
           )}
           {children && <div className="absolute inset-0 flex items-center justify-center">{children}</div>}
-          <div className="absolute top-1 right-1 flex space-x-2">
-            <button
-              className="bg-gray-800 rounded-full p-2"
-              onClick={() => {
-                openConfirm({
-                  title: `Delete ${isItAVideo ? 'video' : 'image'}`,
-                  message: `Are you sure you want to delete this ${isItAVideo ? 'video' : 'image'}? This action cannot be undone.`,
-                  type: 'warning',
-                  confirmText: 'Delete',
-                  onConfirm: () => {
-                    apiClient
-                      .post('/api/img/delete', { imgPath: imageUrl })
-                      .then(() => {
-                        console.log('Image deleted:', imageUrl);
-                        onDelete();
-                      })
-                      .catch(error => {
-                        console.error('Error deleting image:', error);
-                      });
-                  },
-                });
-              }}
-            >
-              <FaTrashAlt />
-            </button>
-          </div>
+          {!isFromLinkedDataset && (
+            <div className="absolute top-1 right-1 flex space-x-2">
+              <button
+                className="bg-gray-800 rounded-full p-2"
+                onClick={() => {
+                  openConfirm({
+                    title: `Delete ${isItAVideo ? 'video' : 'image'}`,
+                    message: `Are you sure you want to delete this ${isItAVideo ? 'video' : 'image'}? This action cannot be undone.`,
+                    type: 'warning',
+                    confirmText: 'Delete',
+                    onConfirm: () => {
+                      apiClient
+                        .post('/api/img/delete', { imgPath: imageUrl })
+                        .then(() => {
+                          console.log('Image deleted:', imageUrl);
+                          onDelete();
+                        })
+                        .catch(error => {
+                          console.error('Error deleting image:', error);
+                        });
+                    },
+                  });
+                }}
+              >
+                <FaTrashAlt />
+              </button>
+            </div>
+          )}
+          {isFromLinkedDataset && (
+            <div className="absolute top-1 right-1">
+              <div className="bg-blue-600 rounded-full p-2" title="Protected: File from linked dataset">
+                <FaEye className="text-white" />
+              </div>
+            </div>
+          )}
         </div>
         {inViewport && isVisible && (
           <div className="text-xs text-gray-100 bg-gray-950 mt-1 absolute bottom-0 left-0 p-1 opacity-25 hover:opacity-90 transition-opacity duration-300 w-full">
