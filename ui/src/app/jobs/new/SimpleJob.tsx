@@ -1076,6 +1076,11 @@ export default function SimpleJob({
                                 setTimeout(() => {
                                   setJobConfig(existingAttributes[0].name, `config.process[0].datasets[${i}].json_attribute`);
                                 }, 0);
+                              } else if (!existingAttributes || existingAttributes.length === 0) {
+                                // Clear any existing json_attribute if no attributes available
+                                setTimeout(() => {
+                                  setJobConfig('', `config.process[0].datasets[${i}].json_attribute`);
+                                }, 0);
                               }
                             }
                           }
@@ -1112,8 +1117,8 @@ export default function SimpleJob({
                               return attributes[0].name;
                             }
                             
-                            // Final fallback
-                            return 'tags';
+                            // No fallback - return empty string if no attributes found
+                            return '';
                           })()}
                           onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].json_attribute`)}
                           options={(() => {
@@ -1126,13 +1131,9 @@ export default function SimpleJob({
                                 label: `${attr.name} (${attr.percentage}% of all images)`
                               }));
                             } else {
-                              // Fallback to default options if no attributes found
+                              // Return empty options if no attributes found - user must analyze first
                               return [
-                                { value: 'tags', label: 'tags' },
-                                { value: 'text', label: 'text' },
-                                { value: 'caption', label: 'caption' },
-                                { value: 'description', label: 'description' },
-                                { value: 'prompt', label: 'prompt' }
+                                { value: '', label: 'Click "Analyze Fields" to detect available attributes' }
                               ];
                             }
                           })()}
