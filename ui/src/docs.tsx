@@ -113,6 +113,23 @@ const docs: { [key: string]: ConfigDoc } = {
       </>
     ),
   },
+  'train.multi_noise_timestep': {
+    title: 'Multi Noise-Timestep Per Image',
+    description: (
+      <>
+        Generate multiple noise-timestep pairs for each image in a single training step to accelerate learning.
+        <br />
+        When set to a value greater than 1, each image will be processed with multiple random noise patterns and timesteps,
+        effectively multiplying the batch size by this factor.
+        <br />
+        <strong>Example:</strong> Setting this to 4 means each image will be trained with 4 different noise-timestep combinations per step.
+        <br />
+        <strong>Use case:</strong> Particularly effective for text-focused models where different caption variations have minimal impact.
+        <br />
+        <strong>Default:</strong> 1 (disabled)
+      </>
+    ),
+  },
   'train.cache_text_embeddings': {
     title: 'Cache Text Embeddings',
     description: (

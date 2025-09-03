@@ -436,6 +436,11 @@ class TrainConfig:
         # standardize inputs to the meand std of the model knowledge
         self.standardize_images = kwargs.get('standardize_images', False)
         self.standardize_latents = kwargs.get('standardize_latents', False)
+        
+        # Multiple noise-timestep pairs per image for faster learning
+        # If set to > 1, will generate multiple noise-timestep pairs for each image in a batch
+        # Effectively multiplies the batch size by this factor for learning
+        self.multi_noise_timestep = kwargs.get('multi_noise_timestep', 1)
 
         # if self.train_turbo and not self.noise_scheduler.startswith("euler"):
         #     raise ValueError(f"train_turbo is only supported with euler and wuler_a noise schedulers")

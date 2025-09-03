@@ -1388,6 +1388,85 @@ class BaseSDTrainProcess(BaseTrainProcess):
             if noisy_latent_multiplier != 1.0:
                 noisy_latents = noisy_latents * noisy_latent_multiplier
 
+            # Multi noise-timestep expansion for faster learning
+            if self.train_config.multi_noise_timestep > 1:
+                multi_factor = self.train_config.multi_noise_timestep
+                expanded_latents_list = []
+                expanded_noise_list = []
+                expanded_timesteps_list = []
+                expanded_prompts_list = []
+                expanded_imgs_list = []
+                
+                for i in range(noisy_latents.shape[0]):
+                    # For each original image, generate multiple noise-timestep pairs
+                    original_latent = latents[i:i+1]  # Keep batch dimension
+                    original_prompt = conditioned_prompts[i]
+                    original_img = imgs[i:i+1] if imgs is not None else None
+                    
+                    for _ in range(multi_factor):
+                        # Generate new random timestep for this pair
+                        if content_or_style == 'balanced':
+                            if min_noise_steps == max_noise_steps:
+                                new_timestep_idx = torch.ones((1,), device=self.device_torch) * min_noise_steps
+                            else:
+                                min_idx = min_noise_steps + 1
+                                max_idx = max_noise_steps - 1
+                                if self.train_config.noise_scheduler == 'flowmatch':
+                                    min_idx = min_noise_steps
+                                    max_idx = max_noise_steps
+                                new_timestep_idx = torch.randint(
+                                    min_idx, max_idx, (1,), device=self.device_torch
+                                )
+                        else:
+                            # Use the same logic as in prepare_timesteps_indices
+                            orig_t = torch.rand((1,), device=latents.device)
+                            if content_or_style == 'content':
+                                new_timestep_idx = orig_t ** 3 * self.train_config.num_train_timesteps
+                            elif content_or_style == 'style':
+                                new_timestep_idx = (1 - orig_t ** 3) * self.train_config.num_train_timesteps
+                            
+                            new_timestep_idx = value_map(
+                                new_timestep_idx, 0, self.train_config.num_train_timesteps - 1,
+                                min_noise_steps, max_noise_steps
+                            ).long().clamp(min_noise_steps, max_noise_steps)
+                        
+                        new_timestep = self.sd.noise_scheduler.timesteps[new_timestep_idx.long()]
+                        
+                        # Generate new random noise for this pair
+                        new_noise = self.get_noise(original_latent, 1, dtype=dtype, batch=batch, timestep=new_timestep)
+                        
+                        # Apply same noise processing as original
+                        if self.train_config.dynamic_noise_offset and not is_reg:
+                            latents_channel_mean = original_latent.mean(dim=(2, 3), keepdim=True) / 2
+                            new_noise = new_noise + latents_channel_mean
+                        
+                        new_noise = new_noise * noise_multiplier
+                        
+                        if self.train_config.random_noise_shift > 0.0:
+                            noise_shift = torch.randn(
+                                (new_noise.shape[0], new_noise.shape[1], 1, 1),  
+                                device=new_noise.device, dtype=new_noise.dtype
+                            ) * self.train_config.random_noise_shift
+                            new_noise += noise_shift
+                        
+                        # Create noisy latents for this pair
+                        new_noisy_latents = self.sd.add_noise(original_latent, new_noise, new_timestep)
+                        
+                        expanded_latents_list.append(new_noisy_latents)
+                        expanded_noise_list.append(new_noise)
+                        expanded_timesteps_list.append(new_timestep)
+                        expanded_prompts_list.append(original_prompt)
+                        if original_img is not None:
+                            expanded_imgs_list.append(original_img)
+                
+                # Replace with expanded versions
+                noisy_latents = torch.cat(expanded_latents_list, dim=0)
+                noise = torch.cat(expanded_noise_list, dim=0)
+                timesteps = torch.cat(expanded_timesteps_list, dim=0)
+                conditioned_prompts = expanded_prompts_list
+                if imgs is not None:
+                    imgs = torch.cat(expanded_imgs_list, dim=0)
+
             # remove grads for these
             noisy_latents.requires_grad = False
             noisy_latents = noisy_latents.detach()

@@ -637,6 +637,16 @@ export default function SimpleJob({
                   required
                 />
                 <NumberInput
+                  label="Multi Noise-Timestep"
+                  className="pt-2"
+                  value={jobConfig.config.process[0].train.multi_noise_timestep || 1}
+                  onChange={value => setJobConfig(value, 'config.process[0].train.multi_noise_timestep')}
+                  placeholder="1"
+                  min={1}
+                  max={8}
+                  docKey="train.multi_noise_timestep"
+                />
+                <NumberInput
                   label="Gradient Accumulation"
                   className="pt-2"
                   value={jobConfig.config.process[0].train.gradient_accumulation}
