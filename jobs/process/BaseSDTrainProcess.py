@@ -1394,13 +1394,11 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 expanded_latents_list = []
                 expanded_noise_list = []
                 expanded_timesteps_list = []
-                expanded_prompts_list = []
                 expanded_imgs_list = []
                 
                 for i in range(noisy_latents.shape[0]):
                     # For each original image, generate multiple noise-timestep pairs
                     original_latent = latents[i:i+1]  # Keep batch dimension
-                    original_prompt = conditioned_prompts[i]
                     original_img = imgs[i:i+1] if imgs is not None else None
                     
                     for _ in range(multi_factor):
@@ -1455,7 +1453,6 @@ class BaseSDTrainProcess(BaseTrainProcess):
                         expanded_latents_list.append(new_noisy_latents)
                         expanded_noise_list.append(new_noise)
                         expanded_timesteps_list.append(new_timestep)
-                        expanded_prompts_list.append(original_prompt)
                         if original_img is not None:
                             expanded_imgs_list.append(original_img)
                 
@@ -1463,9 +1460,13 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 noisy_latents = torch.cat(expanded_latents_list, dim=0)
                 noise = torch.cat(expanded_noise_list, dim=0)
                 timesteps = torch.cat(expanded_timesteps_list, dim=0)
-                conditioned_prompts = expanded_prompts_list
+                # IMPORTANT: Don't duplicate prompts here - they will be handled efficiently in text encoding
+                # conditioned_prompts stays the same - no duplication
                 if imgs is not None:
                     imgs = torch.cat(expanded_imgs_list, dim=0)
+                
+                # Store the multi_factor in batch for later use in SDTrainer
+                batch.multi_noise_factor = multi_factor
 
             # remove grads for these
             noisy_latents.requires_grad = False
