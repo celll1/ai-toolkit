@@ -639,7 +639,7 @@ export default function SimpleJob({
                 <NumberInput
                   label="Multi Noise-Timestep"
                   className="pt-2"
-                  value={jobConfig.config.process[0].train.multi_noise_timestep || 1}
+                  value={jobConfig.config.process[0].train.multi_noise_timestep ?? 1}
                   onChange={value => setJobConfig(value, 'config.process[0].train.multi_noise_timestep')}
                   placeholder="1"
                   min={1}

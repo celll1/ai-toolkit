@@ -1436,7 +1436,7 @@ class SDTrainer(BaseSDTrainProcess):
                             unconditional_embeds = unconditional_embeds.detach()
                     
                     # Handle multi-noise-timestep expansion efficiently
-                    if hasattr(batch, 'multi_noise_factor') and batch.multi_noise_factor > 1:
+                    if hasattr(batch, 'multi_noise_factor') and batch.multi_noise_factor is not None and batch.multi_noise_factor > 1:
                         # Replicate embeddings for each noise-timestep pair
                         # This avoids redundant text encoding computations
                         multi_factor = batch.multi_noise_factor

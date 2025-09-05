@@ -1467,6 +1467,9 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 
                 # Store the multi_factor in batch for later use in SDTrainer
                 batch.multi_noise_factor = multi_factor
+            else:
+                # Ensure the attribute exists even when not using multi-noise-timestep
+                batch.multi_noise_factor = 1
 
             # remove grads for these
             noisy_latents.requires_grad = False
@@ -2243,6 +2246,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     try:
                         loss_dict = self.hook_train_loop(batch_list)
                     except Exception as e:
+                        import traceback
                         traceback.print_exc()
                         #print batch info
                         print("Batch Items:")
