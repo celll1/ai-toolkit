@@ -929,6 +929,7 @@ class DatasetConfig:
 def preprocess_dataset_raw_config(raw_config: List[dict]) -> List[dict]:
     """
     This just splits up the datasets by resolutions so you dont have to do it manually
+    Also resolves linked dataset paths from database
     :param raw_config:
     :return:
     """
@@ -943,6 +944,30 @@ def preprocess_dataset_raw_config(raw_config: List[dict]) -> List[dict]:
         for res in resolution_list:
             dataset_copy = dataset.copy()
             dataset_copy['resolution'] = res
+            
+            # Handle linked dataset path resolution
+            folder_path = dataset_copy.get('folder_path')
+            if folder_path and not os.path.isabs(folder_path):
+                # This might be a linked dataset name, try to resolve from database
+                try:
+                    from prisma import Prisma
+                    prisma = Prisma()
+                    prisma.connect()
+                    
+                    # Look up dataset by name
+                    db_dataset = prisma.dataset.find_unique(where={'name': folder_path})
+                    if db_dataset and db_dataset.type == 'linked' and db_dataset.external_path:
+                        # Use the external path for linked datasets
+                        dataset_copy['folder_path'] = db_dataset.external_path
+                        dataset_copy['dataset_path'] = db_dataset.external_path
+                        print(f"Resolved linked dataset '{folder_path}' to path: {db_dataset.external_path}")
+                    
+                    prisma.disconnect()
+                except Exception as e:
+                    # If database lookup fails, continue with original path
+                    print(f"Warning: Could not resolve linked dataset path for '{folder_path}': {e}")
+                    pass
+            
             new_config.append(dataset_copy)
     return new_config
 
