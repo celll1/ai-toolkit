@@ -130,6 +130,22 @@ const docs: { [key: string]: ConfigDoc } = {
       </>
     ),
   },
+  'train.multi_noise_batch_size': {
+    title: 'Multi Noise Batch Size',
+    description: (
+      <>
+        Controls how many multi-noise-timestep pairs are processed simultaneously for VRAM efficiency.
+        <br />
+        When multi_noise_timestep exceeds this value, pairs will be processed in multiple chunks with separate forward/backward passes.
+        <br />
+        <strong>Example:</strong> multi_noise_timestep=16, multi_noise_batch_size=4 → 4 passes of 4 pairs each
+        <br />
+        <strong>Use case:</strong> Prevents VRAM overflow when using large multi_noise_timestep values
+        <br />
+        <strong>Default:</strong> Same as multi_noise_timestep (process all at once)
+      </>
+    ),
+  },
   'train.cache_text_embeddings': {
     title: 'Cache Text Embeddings',
     description: (

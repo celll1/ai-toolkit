@@ -441,6 +441,11 @@ class TrainConfig:
         # If set to > 1, will generate multiple noise-timestep pairs for each image in a batch
         # Effectively multiplies the batch size by this factor for learning
         self.multi_noise_timestep = kwargs.get('multi_noise_timestep', 1)
+        
+        # Batch size for processing multi-noise-timestep pairs (VRAM efficiency)
+        # If multi_noise_timestep > multi_noise_batch_size, will process in multiple chunks
+        # Example: multi_noise_timestep=16, multi_noise_batch_size=4 → 4 forward/backward passes
+        self.multi_noise_batch_size = kwargs.get('multi_noise_batch_size', None)
 
         # if self.train_turbo and not self.noise_scheduler.startswith("euler"):
         #     raise ValueError(f"train_turbo is only supported with euler and wuler_a noise schedulers")

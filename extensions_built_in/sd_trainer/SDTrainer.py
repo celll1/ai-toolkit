@@ -1437,40 +1437,43 @@ class SDTrainer(BaseSDTrainProcess):
                     
                     # Handle multi-noise-timestep expansion efficiently
                     if hasattr(batch, 'multi_noise_factor') and batch.multi_noise_factor is not None and batch.multi_noise_factor > 1:
-                        # Replicate embeddings for each noise-timestep pair
-                        # This avoids redundant text encoding computations
-                        multi_factor = batch.multi_noise_factor
-                        original_batch_size = conditional_embeds.text_embeds.shape[0]
-                        
-                        # Expand conditional embeddings
-                        expanded_embeds_list = []
-                        for i in range(original_batch_size):
-                            single_embed = conditional_embeds.text_embeds[i:i+1]
-                            expanded_embeds_list.append(single_embed.repeat(multi_factor, 1, 1))
-                        conditional_embeds.text_embeds = torch.cat(expanded_embeds_list, dim=0)
-                        
-                        # Also expand pooled_embeds if they exist
-                        if hasattr(conditional_embeds, 'pooled_embeds') and conditional_embeds.pooled_embeds is not None:
-                            expanded_pooled_list = []
-                            for i in range(original_batch_size):
-                                single_pooled = conditional_embeds.pooled_embeds[i:i+1]
-                                expanded_pooled_list.append(single_pooled.repeat(multi_factor, 1))
-                            conditional_embeds.pooled_embeds = torch.cat(expanded_pooled_list, dim=0)
-                        
-                        # Expand unconditional embeddings if doing CFG
-                        if self.train_config.do_cfg and unconditional_embeds is not None:
-                            expanded_uncond_list = []
-                            for i in range(original_batch_size):
-                                single_uncond = unconditional_embeds.text_embeds[i:i+1]
-                                expanded_uncond_list.append(single_uncond.repeat(multi_factor, 1, 1))
-                            unconditional_embeds.text_embeds = torch.cat(expanded_uncond_list, dim=0)
+                        # Only expand embeddings if NOT using chunked processing
+                        # (chunked processing handles embedding expansion per chunk)
+                        if not (hasattr(batch, 'multi_noise_batch_size') and batch.multi_noise_batch_size < batch.multi_noise_factor):
+                            # Replicate embeddings for each noise-timestep pair
+                            # This avoids redundant text encoding computations
+                            multi_factor = batch.multi_noise_factor
+                            original_batch_size = conditional_embeds.text_embeds.shape[0]
                             
-                            if hasattr(unconditional_embeds, 'pooled_embeds') and unconditional_embeds.pooled_embeds is not None:
-                                expanded_pooled_uncond_list = []
+                            # Expand conditional embeddings
+                            expanded_embeds_list = []
+                            for i in range(original_batch_size):
+                                single_embed = conditional_embeds.text_embeds[i:i+1]
+                                expanded_embeds_list.append(single_embed.repeat(multi_factor, 1, 1))
+                            conditional_embeds.text_embeds = torch.cat(expanded_embeds_list, dim=0)
+                            
+                            # Also expand pooled_embeds if they exist
+                            if hasattr(conditional_embeds, 'pooled_embeds') and conditional_embeds.pooled_embeds is not None:
+                                expanded_pooled_list = []
                                 for i in range(original_batch_size):
-                                    single_pooled_uncond = unconditional_embeds.pooled_embeds[i:i+1]
-                                    expanded_pooled_uncond_list.append(single_pooled_uncond.repeat(multi_factor, 1))
-                                unconditional_embeds.pooled_embeds = torch.cat(expanded_pooled_uncond_list, dim=0)
+                                    single_pooled = conditional_embeds.pooled_embeds[i:i+1]
+                                    expanded_pooled_list.append(single_pooled.repeat(multi_factor, 1))
+                                conditional_embeds.pooled_embeds = torch.cat(expanded_pooled_list, dim=0)
+                            
+                            # Expand unconditional embeddings if doing CFG
+                            if self.train_config.do_cfg and unconditional_embeds is not None:
+                                expanded_uncond_list = []
+                                for i in range(original_batch_size):
+                                    single_uncond = unconditional_embeds.text_embeds[i:i+1]
+                                    expanded_uncond_list.append(single_uncond.repeat(multi_factor, 1, 1))
+                                unconditional_embeds.text_embeds = torch.cat(expanded_uncond_list, dim=0)
+                                
+                                if hasattr(unconditional_embeds, 'pooled_embeds') and unconditional_embeds.pooled_embeds is not None:
+                                    expanded_pooled_uncond_list = []
+                                    for i in range(original_batch_size):
+                                        single_pooled_uncond = unconditional_embeds.pooled_embeds[i:i+1]
+                                        expanded_pooled_uncond_list.append(single_pooled_uncond.repeat(multi_factor, 1))
+                                    unconditional_embeds.pooled_embeds = torch.cat(expanded_pooled_uncond_list, dim=0)
                     
                     if self.decorator:
                         conditional_embeds.text_embeds = self.decorator(
@@ -1817,57 +1820,177 @@ class SDTrainer(BaseSDTrainProcess):
                         prior_pred=prior_pred,
                     )
                 else:
-                    with self.timer('predict_unet'):
-                        noise_pred = self.predict_noise(
-                            noisy_latents=noisy_latents.to(self.device_torch, dtype=dtype),
-                            timesteps=timesteps,
-                            conditional_embeds=conditional_embeds.to(self.device_torch, dtype=dtype),
-                            unconditional_embeds=unconditional_embeds,
-                            batch=batch,
-                            is_primary_pred=True,
-                            **pred_kwargs
-                        )
-                    self.after_unet_predict()
+                    # Check if we need to chunk multi-noise-timestep processing for VRAM efficiency
+                    if (hasattr(batch, 'multi_noise_factor') and hasattr(batch, 'multi_noise_batch_size') and 
+                        batch.multi_noise_factor > 1 and batch.multi_noise_batch_size < batch.multi_noise_factor):
+                        
+                        # Chunked multi-noise processing
+                        total_loss = None
+                        multi_factor = batch.multi_noise_factor
+                        chunk_size = batch.multi_noise_batch_size
+                        original_batch_size = noisy_latents.shape[0] // multi_factor
+                        
+                        # Process in chunks
+                        for chunk_start in range(0, multi_factor, chunk_size):
+                            chunk_end = min(chunk_start + chunk_size, multi_factor)
+                            chunk_indices = []
+                            
+                            # Build indices for this chunk (interleaved from each original image)
+                            for orig_idx in range(original_batch_size):
+                                for noise_idx in range(chunk_start, chunk_end):
+                                    chunk_indices.append(orig_idx * multi_factor + noise_idx)
+                            
+                            # Extract chunk data
+                            chunk_noisy_latents = noisy_latents[chunk_indices]
+                            chunk_timesteps = timesteps[chunk_indices]
+                            chunk_noise = noise[chunk_indices]
+                            
+                            # Extract chunk embeddings (need to replicate appropriately)
+                            chunk_conditional_embeds = conditional_embeds.clone()
+                            chunk_size_actual = chunk_end - chunk_start
+                            
+                            # Replicate embeddings for this chunk size only
+                            expanded_embeds_list = []
+                            for i in range(original_batch_size):
+                                single_embed = conditional_embeds.text_embeds[i:i+1]
+                                expanded_embeds_list.append(single_embed.repeat(chunk_size_actual, 1, 1))
+                            chunk_conditional_embeds.text_embeds = torch.cat(expanded_embeds_list, dim=0)
+                            
+                            # Also handle pooled_embeds if they exist
+                            if hasattr(conditional_embeds, 'pooled_embeds') and conditional_embeds.pooled_embeds is not None:
+                                expanded_pooled_list = []
+                                for i in range(original_batch_size):
+                                    single_pooled = conditional_embeds.pooled_embeds[i:i+1]
+                                    expanded_pooled_list.append(single_pooled.repeat(chunk_size_actual, 1))
+                                chunk_conditional_embeds.pooled_embeds = torch.cat(expanded_pooled_list, dim=0)
+                            
+                            # Handle unconditional embeddings if doing CFG
+                            chunk_unconditional_embeds = None
+                            if unconditional_embeds is not None:
+                                chunk_unconditional_embeds = unconditional_embeds.clone()
+                                expanded_uncond_list = []
+                                for i in range(original_batch_size):
+                                    single_uncond = unconditional_embeds.text_embeds[i:i+1]
+                                    expanded_uncond_list.append(single_uncond.repeat(chunk_size_actual, 1, 1))
+                                chunk_unconditional_embeds.text_embeds = torch.cat(expanded_uncond_list, dim=0)
+                                
+                                if hasattr(unconditional_embeds, 'pooled_embeds') and unconditional_embeds.pooled_embeds is not None:
+                                    expanded_pooled_uncond_list = []
+                                    for i in range(original_batch_size):
+                                        single_pooled_uncond = unconditional_embeds.pooled_embeds[i:i+1]
+                                        expanded_pooled_uncond_list.append(single_pooled_uncond.repeat(chunk_size_actual, 1))
+                                    chunk_unconditional_embeds.pooled_embeds = torch.cat(expanded_pooled_uncond_list, dim=0)
+                            
+                            # Forward pass for this chunk
+                            with self.timer('predict_unet'):
+                                chunk_noise_pred = self.predict_noise(
+                                    noisy_latents=chunk_noisy_latents.to(self.device_torch, dtype=dtype),
+                                    timesteps=chunk_timesteps,
+                                    conditional_embeds=chunk_conditional_embeds.to(self.device_torch, dtype=dtype),
+                                    unconditional_embeds=chunk_unconditional_embeds,
+                                    batch=batch,
+                                    is_primary_pred=True,
+                                    **pred_kwargs
+                                )
+                            self.after_unet_predict()
 
-                    with self.timer('calculate_loss'):
-                        noise = noise.to(self.device_torch, dtype=dtype).detach()
-                        prior_to_calculate_loss = prior_pred
-                        # if we are doing diff_output_preservation and not noing inverted masked prior
-                        # then we need to send none here so it will not target the prior
-                        if self.train_config.diff_output_preservation and not do_inverted_masked_prior:
-                            prior_to_calculate_loss = None
+                            # Calculate loss for this chunk
+                            with self.timer('calculate_loss'):
+                                chunk_noise = chunk_noise.to(self.device_torch, dtype=dtype).detach()
+                                prior_to_calculate_loss = prior_pred
+                                if self.train_config.diff_output_preservation and not do_inverted_masked_prior:
+                                    prior_to_calculate_loss = None
+                                
+                                # Extract chunk mask_multiplier if it exists
+                                chunk_mask_multiplier = mask_multiplier
+                                if mask_multiplier is not None:
+                                    chunk_mask_multiplier = mask_multiplier[chunk_indices]
+                                
+                                chunk_loss = self.calculate_loss(
+                                    noise_pred=chunk_noise_pred,
+                                    noise=chunk_noise,
+                                    noisy_latents=chunk_noisy_latents,
+                                    timesteps=chunk_timesteps,
+                                    batch=batch,
+                                    mask_multiplier=chunk_mask_multiplier,
+                                    prior_pred=prior_to_calculate_loss,
+                                )
+                            
+                            # Backward pass for this chunk
+                            with self.timer('backward'):
+                                # Scale loss by chunk size relative to total multi_factor to maintain equivalent gradients
+                                chunk_weight = chunk_size_actual / multi_factor
+                                scaled_chunk_loss = chunk_loss * chunk_weight
+                                if torch.isnan(scaled_chunk_loss):
+                                    print_acc("chunk loss is nan")
+                                    scaled_chunk_loss = torch.zeros_like(scaled_chunk_loss).requires_grad_(True)
+                                
+                                scaled_chunk_loss = scaled_chunk_loss * loss_multiplier.mean()
+                                self.accelerator.backward(scaled_chunk_loss)
+                            
+                            # Accumulate total loss for reporting
+                            if total_loss is None:
+                                total_loss = chunk_loss.detach() * chunk_weight
+                            else:
+                                total_loss += chunk_loss.detach() * chunk_weight
                         
-                        loss = self.calculate_loss(
-                            noise_pred=noise_pred,
-                            noise=noise,
-                            noisy_latents=noisy_latents,
-                            timesteps=timesteps,
-                            batch=batch,
-                            mask_multiplier=mask_multiplier,
-                            prior_pred=prior_to_calculate_loss,
-                        )
-                    
-                    if self.train_config.diff_output_preservation:
-                        # send the loss backwards otherwise checkpointing will fail
-                        self.accelerator.backward(loss)
-                        normal_loss = loss.detach() # dont send backward again
-                        
-                        dop_embeds = self.diff_output_preservation_embeds.expand_to_batch(noisy_latents.shape[0])
-                        dop_pred = self.predict_noise(
-                            noisy_latents=noisy_latents.to(self.device_torch, dtype=dtype),
-                            timesteps=timesteps,
-                            conditional_embeds=dop_embeds.to(self.device_torch, dtype=dtype),
-                            unconditional_embeds=unconditional_embeds,
-                            batch=batch,
-                            **pred_kwargs
-                        )
-                        dop_loss = torch.nn.functional.mse_loss(dop_pred, prior_pred) * self.train_config.diff_output_preservation_multiplier
-                        self.accelerator.backward(dop_loss)
-                        
-                        loss = normal_loss + dop_loss
-                        loss = loss.clone().detach()
-                        # require grad again so the backward wont fail
+                        # Set loss for reporting
+                        loss = total_loss
                         loss.requires_grad_(True)
+                        
+                    else:
+                        # Standard processing (no chunking)
+                        with self.timer('predict_unet'):
+                            noise_pred = self.predict_noise(
+                                noisy_latents=noisy_latents.to(self.device_torch, dtype=dtype),
+                                timesteps=timesteps,
+                                conditional_embeds=conditional_embeds.to(self.device_torch, dtype=dtype),
+                                unconditional_embeds=unconditional_embeds,
+                                batch=batch,
+                                is_primary_pred=True,
+                                **pred_kwargs
+                            )
+                        self.after_unet_predict()
+
+                        with self.timer('calculate_loss'):
+                            noise = noise.to(self.device_torch, dtype=dtype).detach()
+                            prior_to_calculate_loss = prior_pred
+                            # if we are doing diff_output_preservation and not noing inverted masked prior
+                            # then we need to send none here so it will not target the prior
+                            if self.train_config.diff_output_preservation and not do_inverted_masked_prior:
+                                prior_to_calculate_loss = None
+                            
+                            loss = self.calculate_loss(
+                                noise_pred=noise_pred,
+                                noise=noise,
+                                noisy_latents=noisy_latents,
+                                timesteps=timesteps,
+                                batch=batch,
+                                mask_multiplier=mask_multiplier,
+                                prior_pred=prior_to_calculate_loss,
+                            )
+                        
+                        if self.train_config.diff_output_preservation:
+                            # send the loss backwards otherwise checkpointing will fail
+                            self.accelerator.backward(loss)
+                            normal_loss = loss.detach() # dont send backward again
+                            
+                            dop_embeds = self.diff_output_preservation_embeds.expand_to_batch(noisy_latents.shape[0])
+                            dop_pred = self.predict_noise(
+                                noisy_latents=noisy_latents.to(self.device_torch, dtype=dtype),
+                                timesteps=timesteps,
+                                conditional_embeds=dop_embeds.to(self.device_torch, dtype=dtype),
+                                unconditional_embeds=unconditional_embeds,
+                                batch=batch,
+                                **pred_kwargs
+                            )
+                            dop_loss = torch.nn.functional.mse_loss(dop_pred, prior_pred) * self.train_config.diff_output_preservation_multiplier
+                            self.accelerator.backward(dop_loss)
+                            
+                            loss = normal_loss + dop_loss
+                            loss = loss.clone().detach()
+                            # require grad again so the backward wont fail
+                            loss.requires_grad_(True)
                         
                 # check if nan
                 if torch.isnan(loss):

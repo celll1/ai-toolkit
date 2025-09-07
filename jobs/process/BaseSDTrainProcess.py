@@ -1391,6 +1391,11 @@ class BaseSDTrainProcess(BaseTrainProcess):
             # Multi noise-timestep expansion for faster learning
             if self.train_config.multi_noise_timestep > 1:
                 multi_factor = self.train_config.multi_noise_timestep
+                multi_batch_size = getattr(self.train_config, 'multi_noise_batch_size', None) or multi_factor
+                
+                # Ensure multi_batch_size doesn't exceed multi_factor
+                multi_batch_size = min(multi_batch_size, multi_factor)
+                
                 expanded_latents_list = []
                 expanded_noise_list = []
                 expanded_timesteps_list = []
@@ -1465,11 +1470,13 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 if imgs is not None:
                     imgs = torch.cat(expanded_imgs_list, dim=0)
                 
-                # Store the multi_factor in batch for later use in SDTrainer
+                # Store both multi_factor and multi_batch_size in batch for later use in SDTrainer
                 batch.multi_noise_factor = multi_factor
+                batch.multi_noise_batch_size = multi_batch_size
             else:
-                # Ensure the attribute exists even when not using multi-noise-timestep
+                # Ensure the attributes exist even when not using multi-noise-timestep
                 batch.multi_noise_factor = 1
+                batch.multi_noise_batch_size = 1
 
             # remove grads for these
             noisy_latents.requires_grad = False
