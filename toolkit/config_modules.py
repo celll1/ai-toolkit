@@ -952,7 +952,17 @@ def preprocess_dataset_raw_config(raw_config: List[dict]) -> List[dict]:
             
             # Handle linked dataset path resolution
             folder_path = dataset_copy.get('folder_path')
-            if folder_path and not os.path.isabs(folder_path):
+            dataset_path = dataset_copy.get('dataset_path')
+            
+            # Check both folder_path and dataset_path for linked dataset names
+            resolved_path = None
+            name_to_resolve = folder_path if folder_path and not os.path.isabs(folder_path) else None
+            
+            # Also check dataset_path if it's not absolute
+            if not name_to_resolve and dataset_path and not os.path.isabs(dataset_path):
+                name_to_resolve = dataset_path
+            
+            if name_to_resolve:
                 # This might be a linked dataset name, try to resolve from database
                 try:
                     from prisma import Prisma
@@ -960,17 +970,20 @@ def preprocess_dataset_raw_config(raw_config: List[dict]) -> List[dict]:
                     prisma.connect()
                     
                     # Look up dataset by name
-                    db_dataset = prisma.dataset.find_unique(where={'name': folder_path})
+                    db_dataset = prisma.dataset.find_unique(where={'name': name_to_resolve})
                     if db_dataset and db_dataset.type == 'linked' and db_dataset.external_path:
                         # Use the external path for linked datasets
-                        dataset_copy['folder_path'] = db_dataset.external_path
-                        dataset_copy['dataset_path'] = db_dataset.external_path
-                        print(f"Resolved linked dataset '{folder_path}' to path: {db_dataset.external_path}")
+                        resolved_path = db_dataset.external_path
+                        # Normalize path separators for the OS
+                        resolved_path = os.path.normpath(resolved_path)
+                        dataset_copy['folder_path'] = resolved_path
+                        dataset_copy['dataset_path'] = resolved_path
+                        print(f"Resolved linked dataset '{name_to_resolve}' to path: {resolved_path}")
                     
                     prisma.disconnect()
                 except Exception as e:
                     # If database lookup fails, continue with original path
-                    print(f"Warning: Could not resolve linked dataset path for '{folder_path}': {e}")
+                    print(f"Warning: Could not resolve linked dataset path for '{name_to_resolve}': {e}")
                     pass
             
             new_config.append(dataset_copy)
