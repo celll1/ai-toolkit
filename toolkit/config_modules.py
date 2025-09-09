@@ -954,37 +954,64 @@ def preprocess_dataset_raw_config(raw_config: List[dict]) -> List[dict]:
             folder_path = dataset_copy.get('folder_path')
             dataset_path = dataset_copy.get('dataset_path')
             
-            # Check both folder_path and dataset_path for linked dataset names
-            resolved_path = None
-            name_to_resolve = folder_path if folder_path and not os.path.isabs(folder_path) else None
+            # Try to resolve linked datasets by checking the database
+            # Check if the path exists first - if it doesn't, it might be a linked dataset name
+            path_to_check = folder_path or dataset_path
             
-            # Also check dataset_path if it's not absolute
-            if not name_to_resolve and dataset_path and not os.path.isabs(dataset_path):
-                name_to_resolve = dataset_path
-            
-            if name_to_resolve:
-                # This might be a linked dataset name, try to resolve from database
-                try:
-                    from prisma import Prisma
-                    prisma = Prisma()
-                    prisma.connect()
-                    
-                    # Look up dataset by name
-                    db_dataset = prisma.dataset.find_unique(where={'name': name_to_resolve})
-                    if db_dataset and db_dataset.type == 'linked' and db_dataset.external_path:
-                        # Use the external path for linked datasets
-                        resolved_path = db_dataset.external_path
-                        # Normalize path separators for the OS
-                        resolved_path = os.path.normpath(resolved_path)
-                        dataset_copy['folder_path'] = resolved_path
-                        dataset_copy['dataset_path'] = resolved_path
-                        print(f"Resolved linked dataset '{name_to_resolve}' to path: {resolved_path}")
-                    
-                    prisma.disconnect()
-                except Exception as e:
-                    # If database lookup fails, continue with original path
-                    print(f"Warning: Could not resolve linked dataset path for '{name_to_resolve}': {e}")
-                    pass
+            if path_to_check:
+                # Check if the path actually exists on disk
+                # If it doesn't exist, try to resolve it as a linked dataset name
+                path_exists = os.path.exists(path_to_check)
+                
+                # Also try to resolve if path looks like it might be a dataset name
+                # (e.g., contains "datasets" in path but doesn't exist)
+                looks_like_dataset_name = not path_exists or ('datasets' in path_to_check.lower() and not path_exists)
+                
+                if looks_like_dataset_name:
+                    # This might be a linked dataset name, try to resolve from database
+                    try:
+                        from prisma import Prisma
+                        prisma = Prisma()
+                        prisma.connect()
+                        
+                        # Try different name formats for lookup
+                        names_to_try = []
+                        
+                        # Try the full path as a name
+                        names_to_try.append(path_to_check)
+                        
+                        # Try just the last part of the path
+                        if '/' in path_to_check or '\\' in path_to_check:
+                            last_part = path_to_check.replace('\\', '/').split('/')[-1]
+                            names_to_try.append(last_part)
+                        
+                        # Try stripping common prefixes
+                        for prefix in ['M:\\ai-toolkit\\datasets\\', 'M:\\ai-toolkit\\datasets/', 'datasets/', 'datasets\\']:
+                            if path_to_check.startswith(prefix):
+                                stripped_name = path_to_check[len(prefix):]
+                                names_to_try.append(stripped_name)
+                        
+                        # Try to find the dataset with any of these names
+                        resolved_path = None
+                        for name in names_to_try:
+                            if not name:
+                                continue
+                            db_dataset = prisma.dataset.find_unique(where={'name': name})
+                            if db_dataset and db_dataset.type == 'linked' and db_dataset.external_path:
+                                # Use the external path for linked datasets
+                                resolved_path = db_dataset.external_path
+                                # Normalize path separators for the OS
+                                resolved_path = os.path.normpath(resolved_path)
+                                dataset_copy['folder_path'] = resolved_path
+                                dataset_copy['dataset_path'] = resolved_path
+                                print(f"Resolved linked dataset '{name}' to path: {resolved_path}")
+                                break
+                        
+                        prisma.disconnect()
+                    except Exception as e:
+                        # If database lookup fails, continue with original path
+                        print(f"Warning: Could not resolve linked dataset path for '{path_to_check}': {e}")
+                        pass
             
             new_config.append(dataset_copy)
     return new_config
