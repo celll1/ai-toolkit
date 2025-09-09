@@ -396,6 +396,23 @@ class AiToolkitDataset(LatentCachingMixin, ControlCachingMixin, CLIPCachingMixin
         self.dataset_path = dataset_config.dataset_path
         if self.dataset_path is None:
             self.dataset_path = folder_path
+            
+        # Check if this is a linked dataset and resolve the external path
+        if self.dataset_path and os.path.isdir(self.dataset_path):
+            linked_marker = os.path.join(self.dataset_path, '.linked')
+            if os.path.exists(linked_marker):
+                try:
+                    import json
+                    with open(linked_marker, 'r', encoding='utf-8') as f:
+                        link_info = json.load(f)
+                        external_path = link_info.get('externalPath')
+                        if external_path and os.path.exists(external_path):
+                            print(f"Resolved linked dataset '{self.dataset_path}' to external path: {external_path}")
+                            self.dataset_path = external_path
+                        else:
+                            print(f"Warning: External path '{external_path}' from linked dataset does not exist")
+                except Exception as e:
+                    print(f"Warning: Could not resolve linked dataset '{self.dataset_path}': {e}")
 
         self.is_caching_latents = dataset_config.cache_latents or dataset_config.cache_latents_to_disk
         self.is_caching_latents_to_memory = dataset_config.cache_latents

@@ -74,10 +74,29 @@ export async function POST(request: NextRequest) {
     }
     
     const datasetsRoot = await getDatasetsRoot();
-    const datasetPath = path.join(datasetsRoot, datasetName);
+    let datasetPath = path.join(datasetsRoot, datasetName);
     
     if (!fs.existsSync(datasetPath)) {
       return NextResponse.json({ error: 'Dataset not found' }, { status: 404 });
+    }
+    
+    // Check if this is a linked dataset
+    const linkedMarker = path.join(datasetPath, '.linked');
+    if (fs.existsSync(linkedMarker)) {
+      try {
+        const linkInfo = JSON.parse(fs.readFileSync(linkedMarker, 'utf8'));
+        const externalPath = linkInfo.externalPath;
+        
+        if (externalPath && fs.existsSync(externalPath)) {
+          // Use external path for linked dataset
+          datasetPath = externalPath;
+        } else {
+          return NextResponse.json({ error: 'External dataset path does not exist' }, { status: 404 });
+        }
+      } catch (e) {
+        console.error('Error reading linked dataset info:', e);
+        return NextResponse.json({ error: 'Failed to read linked dataset information' }, { status: 500 });
+      }
     }
     
     const caption = getRandomCaption(datasetPath);
