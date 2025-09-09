@@ -993,10 +993,16 @@ def preprocess_dataset_raw_config(raw_config: List[dict]) -> List[dict]:
                         
                         # Try to find the dataset with any of these names
                         resolved_path = None
+                        print(f"DEBUG: Trying to resolve linked dataset for path: {path_to_check}")
+                        print(f"DEBUG: Names to try: {names_to_try}")
+                        
                         for name in names_to_try:
                             if not name:
                                 continue
+                            print(f"DEBUG: Looking up dataset name: '{name}'")
                             db_dataset = prisma.dataset.find_unique(where={'name': name})
+                            print(f"DEBUG: Database result for '{name}': {db_dataset}")
+                            
                             if db_dataset and db_dataset.type == 'linked' and db_dataset.external_path:
                                 # Use the external path for linked datasets
                                 resolved_path = db_dataset.external_path
@@ -1004,8 +1010,13 @@ def preprocess_dataset_raw_config(raw_config: List[dict]) -> List[dict]:
                                 resolved_path = os.path.normpath(resolved_path)
                                 dataset_copy['folder_path'] = resolved_path
                                 dataset_copy['dataset_path'] = resolved_path
-                                print(f"Resolved linked dataset '{name}' to path: {resolved_path}")
+                                print(f"SUCCESS: Resolved linked dataset '{name}' to path: {resolved_path}")
                                 break
+                            else:
+                                print(f"DEBUG: '{name}' not found or not linked dataset")
+                        
+                        if not resolved_path:
+                            print(f"WARNING: Could not resolve linked dataset for any of the names: {names_to_try}")
                         
                         prisma.disconnect()
                     except Exception as e:
