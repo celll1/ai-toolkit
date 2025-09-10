@@ -402,7 +402,6 @@ class AiToolkitDataset(LatentCachingMixin, ControlCachingMixin, CLIPCachingMixin
             linked_marker = os.path.join(self.dataset_path, '.linked')
             if os.path.exists(linked_marker):
                 try:
-                    import json
                     with open(linked_marker, 'r', encoding='utf-8') as f:
                         link_info = json.load(f)
                         external_path = link_info.get('externalPath')
