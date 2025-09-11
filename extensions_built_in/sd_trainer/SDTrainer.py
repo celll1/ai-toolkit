@@ -15,7 +15,7 @@ from toolkit.basic import value_map, adain, get_mean_std
 from toolkit.clip_vision_adapter import ClipVisionAdapter
 from toolkit.config_modules import GenerateImageConfig
 from toolkit.data_loader import get_dataloader_datasets
-from toolkit.data_transfer_object.data_loader import DataLoaderBatchDTO, FileItemDTO, TextEmbeddingBatchDTO
+from toolkit.data_transfer_object.data_loader import DataLoaderBatchDTO, FileItemDTO
 from toolkit.guidance import get_targeted_guidance_loss, get_guidance_loss, GuidanceType
 from toolkit.image_utils import show_tensors, show_latents
 from toolkit.ip_adapter import IPAdapter
@@ -1846,8 +1846,8 @@ class SDTrainer(BaseSDTrainProcess):
                             chunk_noise = noise[chunk_indices]
                             
                             # Extract chunk embeddings (need to replicate appropriately)
-                            # Create a new object instead of cloning to save memory
-                            chunk_conditional_embeds = TextEmbeddingBatchDTO()
+                            # Create a new PromptEmbeds object instead of cloning to save memory
+                            chunk_conditional_embeds = PromptEmbeds()
                             chunk_size_actual = chunk_end - chunk_start
                             
                             # Replicate embeddings for this chunk size only
@@ -1869,7 +1869,7 @@ class SDTrainer(BaseSDTrainProcess):
                             # Handle unconditional embeddings if doing CFG
                             chunk_unconditional_embeds = None
                             if unconditional_embeds is not None:
-                                chunk_unconditional_embeds = TextEmbeddingBatchDTO()
+                                chunk_unconditional_embeds = PromptEmbeds()
                                 # Use list comprehension with direct cat to avoid intermediate list accumulation
                                 expanded_uncond = torch.cat([
                                     unconditional_embeds.text_embeds[i:i+1].repeat(chunk_size_actual, 1, 1)
