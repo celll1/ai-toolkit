@@ -15,7 +15,7 @@ from toolkit.basic import value_map, adain, get_mean_std
 from toolkit.clip_vision_adapter import ClipVisionAdapter
 from toolkit.config_modules import GenerateImageConfig
 from toolkit.data_loader import get_dataloader_datasets
-from toolkit.data_transfer_object.data_loader import DataLoaderBatchDTO, FileItemDTO
+from toolkit.data_transfer_object.data_loader import DataLoaderBatchDTO, FileItemDTO, TextEmbeddingBatchDTO
 from toolkit.guidance import get_targeted_guidance_loss, get_guidance_loss, GuidanceType
 from toolkit.image_utils import show_tensors, show_latents
 from toolkit.ip_adapter import IPAdapter
@@ -1846,40 +1846,43 @@ class SDTrainer(BaseSDTrainProcess):
                             chunk_noise = noise[chunk_indices]
                             
                             # Extract chunk embeddings (need to replicate appropriately)
-                            chunk_conditional_embeds = conditional_embeds.clone()
+                            # Create a new object instead of cloning to save memory
+                            chunk_conditional_embeds = TextEmbeddingBatchDTO()
                             chunk_size_actual = chunk_end - chunk_start
                             
                             # Replicate embeddings for this chunk size only
-                            expanded_embeds_list = []
-                            for i in range(original_batch_size):
-                                single_embed = conditional_embeds.text_embeds[i:i+1]
-                                expanded_embeds_list.append(single_embed.repeat(chunk_size_actual, 1, 1))
-                            chunk_conditional_embeds.text_embeds = torch.cat(expanded_embeds_list, dim=0)
+                            # Use direct indexing to avoid intermediate list accumulation
+                            expanded_embeds = torch.cat([
+                                conditional_embeds.text_embeds[i:i+1].repeat(chunk_size_actual, 1, 1)
+                                for i in range(original_batch_size)
+                            ], dim=0)
+                            chunk_conditional_embeds.text_embeds = expanded_embeds
                             
                             # Also handle pooled_embeds if they exist
                             if hasattr(conditional_embeds, 'pooled_embeds') and conditional_embeds.pooled_embeds is not None:
-                                expanded_pooled_list = []
-                                for i in range(original_batch_size):
-                                    single_pooled = conditional_embeds.pooled_embeds[i:i+1]
-                                    expanded_pooled_list.append(single_pooled.repeat(chunk_size_actual, 1))
-                                chunk_conditional_embeds.pooled_embeds = torch.cat(expanded_pooled_list, dim=0)
+                                expanded_pooled = torch.cat([
+                                    conditional_embeds.pooled_embeds[i:i+1].repeat(chunk_size_actual, 1)
+                                    for i in range(original_batch_size)
+                                ], dim=0)
+                                chunk_conditional_embeds.pooled_embeds = expanded_pooled
                             
                             # Handle unconditional embeddings if doing CFG
                             chunk_unconditional_embeds = None
                             if unconditional_embeds is not None:
-                                chunk_unconditional_embeds = unconditional_embeds.clone()
-                                expanded_uncond_list = []
-                                for i in range(original_batch_size):
-                                    single_uncond = unconditional_embeds.text_embeds[i:i+1]
-                                    expanded_uncond_list.append(single_uncond.repeat(chunk_size_actual, 1, 1))
-                                chunk_unconditional_embeds.text_embeds = torch.cat(expanded_uncond_list, dim=0)
+                                chunk_unconditional_embeds = TextEmbeddingBatchDTO()
+                                # Use list comprehension with direct cat to avoid intermediate list accumulation
+                                expanded_uncond = torch.cat([
+                                    unconditional_embeds.text_embeds[i:i+1].repeat(chunk_size_actual, 1, 1)
+                                    for i in range(original_batch_size)
+                                ], dim=0)
+                                chunk_unconditional_embeds.text_embeds = expanded_uncond
                                 
                                 if hasattr(unconditional_embeds, 'pooled_embeds') and unconditional_embeds.pooled_embeds is not None:
-                                    expanded_pooled_uncond_list = []
-                                    for i in range(original_batch_size):
-                                        single_pooled_uncond = unconditional_embeds.pooled_embeds[i:i+1]
-                                        expanded_pooled_uncond_list.append(single_pooled_uncond.repeat(chunk_size_actual, 1))
-                                    chunk_unconditional_embeds.pooled_embeds = torch.cat(expanded_pooled_uncond_list, dim=0)
+                                    expanded_pooled_uncond = torch.cat([
+                                        unconditional_embeds.pooled_embeds[i:i+1].repeat(chunk_size_actual, 1)
+                                        for i in range(original_batch_size)
+                                    ], dim=0)
+                                    chunk_unconditional_embeds.pooled_embeds = expanded_pooled_uncond
                             
                             # Forward pass for this chunk
                             with self.timer('predict_unet'):
@@ -1933,6 +1936,12 @@ class SDTrainer(BaseSDTrainProcess):
                                 total_loss = chunk_loss.detach() * chunk_weight
                             else:
                                 total_loss += chunk_loss.detach() * chunk_weight
+                            
+                            # Clear chunk tensors to free memory
+                            del chunk_noise_pred, chunk_loss, chunk_noise
+                            del chunk_conditional_embeds, chunk_unconditional_embeds
+                            if chunk_start + chunk_size < multi_factor:  # Not the last chunk
+                                torch.cuda.empty_cache()
                         
                         # Set loss for reporting
                         loss = total_loss
