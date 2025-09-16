@@ -2259,15 +2259,24 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 with self.accelerator.accumulate(self.modules_being_trained):
                     try:
                         loss_dict = self.hook_train_loop(batch_list)
-                    except Exception as e:
-                        import traceback
-                        traceback.print_exc()
-                        #print batch info
-                        print("Batch Items:")
-                        for batch in batch_list:
-                            for item in batch.file_items:
-                                print(f" - {item.path}")
-                        raise e
+                    except (KeyboardInterrupt, Exception) as e:
+                        # Check if this is a stop signal or keyboard interrupt that should trigger save
+                        is_job_stop = isinstance(e, Exception) and str(e) == "Job stopped"
+                        is_keyboard_interrupt = isinstance(e, KeyboardInterrupt)
+                        
+                        if is_job_stop or is_keyboard_interrupt:
+                            # Let the outer exception handler take care of saving
+                            raise
+                        else:
+                            # Other exceptions - print debug info
+                            import traceback
+                            traceback.print_exc()
+                            #print batch info
+                            print("Batch Items:")
+                            for batch in batch_list:
+                                for item in batch.file_items:
+                                    print(f" - {item.path}")
+                            raise e
                 if self.torch_profiler is not None:
                     torch.cuda.synchronize()  # Make sure all CUDA ops are done
                     self.torch_profiler.stop()
