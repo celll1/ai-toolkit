@@ -487,9 +487,16 @@ class BaseSDTrainProcess(BaseTrainProcess):
         pass
 
     def on_error(self, e: Exception):
-        if isinstance(e, KeyboardInterrupt) and self.save_config.save_on_interrupt:
+        # Handle both KeyboardInterrupt and UITrainer's "Job stopped" exception
+        is_job_stop = isinstance(e, Exception) and str(e) == "Job stopped"
+        is_keyboard_interrupt = isinstance(e, KeyboardInterrupt)
+        
+        if (is_job_stop or is_keyboard_interrupt) and self.save_config.save_on_interrupt:
             print_acc("")
-            print_acc("Training interrupted by user. Saving current state...")
+            if is_job_stop:
+                print_acc("Training stopped by user request. Saving current state...")
+            else:
+                print_acc("Training interrupted by user. Saving current state...")
             if self.accelerator.is_main_process:
                 self.save(self.step_num)
                 print_acc(f"Model saved at step {self.step_num}")
@@ -2399,12 +2406,21 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     self.step_num = step + 1
                     self.grad_accumulation_step += 1
                     self.end_step_hook()
-        except KeyboardInterrupt:
-            print_acc("")
-            print_acc("Training interrupted by user. Saving current state...")
-            if self.save_config.save_on_interrupt and self.accelerator.is_main_process:
-                self.save(self.step_num)
-                print_acc(f"Model saved at step {self.step_num}")
+        except (KeyboardInterrupt, Exception) as e:
+            # Handle both KeyboardInterrupt and UITrainer's "Job stopped" exception
+            is_job_stop = isinstance(e, Exception) and str(e) == "Job stopped"
+            is_keyboard_interrupt = isinstance(e, KeyboardInterrupt)
+            
+            if is_job_stop or is_keyboard_interrupt:
+                print_acc("")
+                if is_job_stop:
+                    print_acc("Training stopped by user request. Saving current state...")
+                else:
+                    print_acc("Training interrupted by user. Saving current state...")
+                
+                if self.save_config.save_on_interrupt and self.accelerator.is_main_process:
+                    self.save(self.step_num)
+                    print_acc(f"Model saved at step {self.step_num}")
             raise
 
 
