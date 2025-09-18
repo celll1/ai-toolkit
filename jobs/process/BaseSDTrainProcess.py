@@ -2414,7 +2414,9 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     # update various steps
                     self.step_num = step + 1
                     self.grad_accumulation_step += 1
-                    self.end_step_hook()
+                    
+                # Call end_step_hook inside try block to catch UITrainer's stop exception
+                self.end_step_hook()
         except (KeyboardInterrupt, Exception) as e:
             # Handle both KeyboardInterrupt and UITrainer's "Job stopped" exception
             is_job_stop = isinstance(e, Exception) and str(e) == "Job stopped"
