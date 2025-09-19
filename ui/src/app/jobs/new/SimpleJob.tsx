@@ -622,6 +622,13 @@ export default function SimpleJob({
               min={1}
               required
             />
+            <Checkbox
+              label="Save on Interrupt"
+              className="pt-2"
+              checked={jobConfig.config.process[0].save.save_on_interrupt || false}
+              onChange={value => setJobConfig(value, 'config.process[0].save.save_on_interrupt')}
+              helpText="Save model when training is interrupted (Ctrl+C or UI stop)"
+            />
           </Card>
         </div>
         <div>
