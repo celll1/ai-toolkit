@@ -507,6 +507,13 @@ class CaptionProcessingDTOMixin:
                         new_token_list.append(token)
                         continue
                     
+                    # Check if we should exclude person count tags
+                    if self.dataset_config.tag_dropout_exclude_person_count:
+                        # Check if this is a person count tag
+                        if tag_group_manager and tag_group_manager.is_person_count_tag(token):
+                            new_token_list.append(token)
+                            continue
+                    
                     # Determine dropout rate for this tag
                     dropout_rate = self.dataset_config.tag_dropout_rate
                     

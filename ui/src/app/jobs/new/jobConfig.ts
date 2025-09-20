@@ -11,6 +11,7 @@ export const defaultDatasetConfig: DatasetConfig = {
   tag_dropout_rate: 0,
   tag_dropout_keep_first_n: 0,
   tag_dropout_per_epoch: false,
+  tag_dropout_exclude_person_count: false,
   tag_dropout_category_rates: {},
   shuffle_tokens: false,
   shuffle_per_epoch: false,

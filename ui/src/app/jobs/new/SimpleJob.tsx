@@ -1252,6 +1252,13 @@ export default function SimpleJob({
                               onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].tag_dropout_per_epoch`)}
                               helpText="Apply different random dropout each epoch"
                             />
+                            <Checkbox
+                              label="Exclude Person Count Tags"
+                              className="pt-2"
+                              checked={dataset.tag_dropout_exclude_person_count || false}
+                              onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].tag_dropout_exclude_person_count`)}
+                              helpText="Exclude tags like '1girl', '2boys' from dropout"
+                            />
                             
                             {/* Category-specific dropout rates */}
                             <div className="pt-2">

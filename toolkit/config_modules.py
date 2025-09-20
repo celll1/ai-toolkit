@@ -842,6 +842,7 @@ class DatasetConfig:
         self.tag_dropout_per_epoch: bool = kwargs.get('tag_dropout_per_epoch', False)  # Randomize dropout per epoch
         self.tag_dropout_keep_first_n: int = kwargs.get('tag_dropout_keep_first_n', 0)  # Keep first n tags from dropout
         self.tag_dropout_category_rates: Dict[str, float] = kwargs.get('tag_dropout_category_rates', {})  # Per-category dropout rates
+        self.tag_dropout_exclude_person_count: bool = kwargs.get('tag_dropout_exclude_person_count', False)  # Exclude person count tags from dropout
         self.flip_x: bool = kwargs.get('flip_x', False)
         self.flip_y: bool = kwargs.get('flip_y', False)
         self.augments: List[str] = kwargs.get('augments', [])
