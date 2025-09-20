@@ -1222,6 +1222,79 @@ export default function SimpleJob({
                         )}
                       </FormGroup>
                       
+                      <FormGroup label="Tag Dropout" className="pt-4">
+                        <NumberInput
+                          label="Tag Dropout Rate"
+                          className="pt-2"
+                          value={dataset.tag_dropout_rate || 0}
+                          onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].tag_dropout_rate`)}
+                          placeholder="eg. 0.1"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          helpText="Probability of dropping individual tags (0-1)"
+                        />
+                        {dataset.tag_dropout_rate > 0 && (
+                          <>
+                            <NumberInput
+                              label="Keep First N Tags"
+                              className="pt-2"
+                              value={dataset.tag_dropout_keep_first_n || 0}
+                              onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].tag_dropout_keep_first_n`)}
+                              placeholder="eg. 3"
+                              min={0}
+                              helpText="Number of first tags to always keep"
+                            />
+                            <Checkbox
+                              label="Randomize Per Epoch"
+                              className="pt-2"
+                              checked={dataset.tag_dropout_per_epoch || false}
+                              onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].tag_dropout_per_epoch`)}
+                              helpText="Apply different random dropout each epoch"
+                            />
+                            
+                            {/* Category-specific dropout rates */}
+                            <div className="pt-2">
+                              <label className="block text-sm font-medium text-gray-200 mb-1">
+                                Category-Specific Dropout Rates
+                              </label>
+                              <div className="space-y-2 text-xs">
+                                {['Character', 'General', 'Artist', 'Copyright', 'Meta'].map(category => (
+                                  <div key={category} className="flex items-center space-x-2">
+                                    <label className="w-20 text-gray-300">{category}:</label>
+                                    <input
+                                      type="number"
+                                      className="flex-1 px-2 py-1 bg-gray-700 text-gray-200 rounded"
+                                      value={dataset.tag_dropout_category_rates?.[category] || ''}
+                                      onChange={e => {
+                                        const value = parseFloat(e.target.value);
+                                        const currentRates = dataset.tag_dropout_category_rates || {};
+                                        if (e.target.value === '' || isNaN(value)) {
+                                          delete currentRates[category];
+                                        } else {
+                                          currentRates[category] = Math.min(1, Math.max(0, value));
+                                        }
+                                        setJobConfig(
+                                          Object.keys(currentRates).length > 0 ? currentRates : {},
+                                          `config.process[0].datasets[${i}].tag_dropout_category_rates`
+                                        );
+                                      }}
+                                      placeholder="default"
+                                      min={0}
+                                      max={1}
+                                      step={0.05}
+                                    />
+                                  </div>
+                                ))}
+                                <p className="text-gray-400 italic mt-1">
+                                  Leave empty to use global rate. Requires tag group files.
+                                </p>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </FormGroup>
+                      
                       <FormGroup label="Tag Shuffling" className="pt-4">
                         <Checkbox
                           label="Shuffle Tags"

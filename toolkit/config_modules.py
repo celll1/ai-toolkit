@@ -836,6 +836,12 @@ class DatasetConfig:
         self.sample_size: int = kwargs.get('sample_size', None)  # Number of images to sample from dataset (None = use all)
         self.caption_dropout_rate: float = float(kwargs.get('caption_dropout_rate', 0.0))
         self.keep_tokens: int = kwargs.get('keep_tokens', 0)  # #of first tokens to always keep unless caption dropped
+        
+        # Tag-level dropout settings
+        self.tag_dropout_rate: float = float(kwargs.get('tag_dropout_rate', 0.0))  # Global tag dropout rate
+        self.tag_dropout_per_epoch: bool = kwargs.get('tag_dropout_per_epoch', False)  # Randomize dropout per epoch
+        self.tag_dropout_keep_first_n: int = kwargs.get('tag_dropout_keep_first_n', 0)  # Keep first n tags from dropout
+        self.tag_dropout_category_rates: Dict[str, float] = kwargs.get('tag_dropout_category_rates', {})  # Per-category dropout rates
         self.flip_x: bool = kwargs.get('flip_x', False)
         self.flip_y: bool = kwargs.get('flip_y', False)
         self.augments: List[str] = kwargs.get('augments', [])

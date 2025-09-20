@@ -466,6 +466,72 @@ class CaptionProcessingDTOMixin:
                         new_token_list.append(token)
             token_list = new_token_list
 
+        # Handle tag-level dropout (different from token dropout)
+        if self.dataset_config.tag_dropout_rate > 0 or self.dataset_config.tag_dropout_category_rates:
+            if not short_caption:
+                new_token_list = []
+                keep_first_n = self.dataset_config.tag_dropout_keep_first_n
+                
+                # Get tag group manager if using category-specific dropout
+                tag_group_manager = None
+                if self.dataset_config.tag_dropout_category_rates:
+                    # Check for cached TagGroupManager
+                    if hasattr(self.dataset_config, '_tag_group_manager'):
+                        tag_group_manager = self.dataset_config._tag_group_manager
+                    else:
+                        from toolkit.tag_group_utils import TagNormalizationFormat, get_or_create_tag_group_manager
+                        norm_format = TagNormalizationFormat.SPACE_ESCAPED
+                        if hasattr(self.dataset_config, 'tag_normalization_format'):
+                            format_str = self.dataset_config.tag_normalization_format
+                            if format_str == 'underscore':
+                                norm_format = TagNormalizationFormat.UNDERSCORE
+                            elif format_str == 'space':
+                                norm_format = TagNormalizationFormat.SPACE
+                            elif format_str == 'space_escaped':
+                                norm_format = TagNormalizationFormat.SPACE_ESCAPED
+                        
+                        tag_group_manager = get_or_create_tag_group_manager(
+                            self.dataset_config.tag_group_dir,
+                            norm_format
+                        )
+                
+                # Get categorized tags if needed
+                categorized_tags = {}
+                if tag_group_manager:
+                    categorized_tags = tag_group_manager.categorize_tags(token_list)
+                
+                # Apply dropout
+                for idx, token in enumerate(token_list):
+                    # Keep first n tags
+                    if idx < keep_first_n:
+                        new_token_list.append(token)
+                        continue
+                    
+                    # Determine dropout rate for this tag
+                    dropout_rate = self.dataset_config.tag_dropout_rate
+                    
+                    # Check if tag belongs to a category with specific dropout rate
+                    if tag_group_manager and self.dataset_config.tag_dropout_category_rates:
+                        for category, tags in categorized_tags.items():
+                            if token in tags and category in self.dataset_config.tag_dropout_category_rates:
+                                dropout_rate = self.dataset_config.tag_dropout_category_rates[category]
+                                break
+                    
+                    # Apply dropout based on epoch if enabled
+                    if self.dataset_config.tag_dropout_per_epoch:
+                        # Use epoch-based seed for consistent dropout per epoch
+                        seed_value = hash(f"{self.path}_{token}_{epoch_num}") % (2**32)
+                        random_gen = random.Random(seed_value)
+                        rand = random_gen.random()
+                    else:
+                        rand = random.random()
+                    
+                    # Keep tag if random value is above dropout rate
+                    if rand > dropout_rate:
+                        new_token_list.append(token)
+                
+                token_list = new_token_list
+
         if self.dataset_config.shuffle_tokens:
             if self.dataset_config.shuffle_per_epoch:
                 # Seed based on image path and epoch for consistent shuffling per epoch
