@@ -1919,8 +1919,22 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 else:
                     # For full model fine-tuning, prepare params from the model directly
                     print_acc("Setting up full model fine-tuning parameters...")
-                    # Ensure params will be prepared from model
-                    params = []  # Start with empty params list to trigger fallback
+                    # Set device state preset before getting params
+                    self.sd.set_device_state(self.get_params_device_state_preset)
+                    
+                    print_acc("Preparing full model parameters via sd.prepare_optimizer_params...")
+                    print_acc(f"train_unet: {self.train_config.train_unet}, train_text_encoder: {self.train_config.train_text_encoder}")
+                    # Prepare parameters from the model directly
+                    params = self.sd.prepare_optimizer_params(
+                        unet=self.train_config.train_unet,
+                        text_encoder=self.train_config.train_text_encoder,
+                        text_encoder_lr=self.train_config.lr,
+                        unet_lr=self.train_config.lr,
+                        default_lr=self.train_config.lr,
+                        refiner=self.train_config.train_refiner and self.sd.refiner_unet is not None,
+                        refiner_lr=self.train_config.refiner_lr,
+                    )
+                    print_acc(f"Prepared {len(params)} parameter groups for full model training")
                     flush()
 
                 lora_name = self.name
