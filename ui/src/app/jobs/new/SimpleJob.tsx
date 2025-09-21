@@ -45,11 +45,26 @@ export default function SimpleJob({
   // State for dataset attributes
   const [datasetAttributes, setDatasetAttributes] = useState<{[datasetName: string]: Array<{name: string, frequency: number, percentage: number, type: string, min?: number, max?: number}>}>({});
   const [analyzingDatasets, setAnalyzingDatasets] = useState<{[datasetName: string]: {analyzing: boolean, progress: {current: number, total: number, percentage: number, message: string}}}> ({});
+  const [availableTagGroups, setAvailableTagGroups] = useState<string[]>([]);
   
   // Get dataset information including image counts
   const { datasets: datasetInfo } = useDatasetList();
   
   // Function to fetch dataset attributes with progress
+  const fetchAvailableTagGroups = async (tagGroupDir: string) => {
+    try {
+      const response = await fetch(`/api/datasets/tag-groups?dir=${encodeURIComponent(tagGroupDir)}`);
+      const data = await response.json();
+      if (data.groups) {
+        setAvailableTagGroups(data.groups);
+      }
+    } catch (error) {
+      console.error('Failed to fetch tag groups:', error);
+      // Fallback to default groups
+      setAvailableTagGroups(['Character', 'General', 'Artist', 'Copyright', 'Meta', 'Quality', 'Rating', 'Model']);
+    }
+  };
+
   const fetchDatasetAttributes = async (datasetName: string) => {
     if (!datasetName || datasetAttributes[datasetName] || analyzingDatasets[datasetName]?.analyzing) {
       return; // Already loaded, invalid dataset name, or currently analyzing
@@ -207,6 +222,13 @@ export default function SimpleJob({
     };
     
     loadExistingAttributes();
+  }, [jobConfig.config.process[0].datasets]);
+  
+  // Load tag groups on mount and when any dataset's tag_group_dir changes
+  useEffect(() => {
+    // Get the first dataset's tag_group_dir or use default
+    const tagGroupDir = jobConfig.config.process[0].datasets[0]?.tag_group_dir || 'taggroup';
+    fetchAvailableTagGroups(tagGroupDir);
   }, [jobConfig.config.process[0].datasets]);
   
   // Function to add/update JSON filter for a dataset
@@ -1222,6 +1244,20 @@ export default function SimpleJob({
                         )}
                       </FormGroup>
                       
+                      {/* Tag Group Directory - moved here so it's available for both dropout and shuffle */}
+                      <TextInput
+                        label="Tag Group Directory"
+                        className="pt-4"
+                        value={dataset.tag_group_dir || 'taggroup'}
+                        onChange={value => {
+                          setJobConfig(value, `config.process[0].datasets[${i}].tag_group_dir`);
+                          // Fetch available tag groups when directory changes
+                          fetchAvailableTagGroups(value || 'taggroup');
+                        }}
+                        placeholder="taggroup"
+                        helpText="Directory containing tag group JSON files"
+                      />
+                      
                       <FormGroup label="Tag Dropout" className="pt-4">
                         <NumberInput
                           label="Tag Dropout Rate"
@@ -1266,7 +1302,7 @@ export default function SimpleJob({
                                 Category-Specific Dropout Rates
                               </label>
                               <div className="space-y-2 text-xs">
-                                {['Character', 'General', 'Artist', 'Copyright', 'Meta'].map(category => (
+                                {availableTagGroups.length > 0 ? availableTagGroups.map(category => (
                                   <div key={category} className="flex items-center space-x-2">
                                     <label className="w-20 text-gray-300">{category}:</label>
                                     <input
@@ -1292,10 +1328,14 @@ export default function SimpleJob({
                                       step={0.05}
                                     />
                                   </div>
-                                ))}
-                                <p className="text-gray-400 italic mt-1">
-                                  Leave empty to use global rate. Requires tag group files.
-                                </p>
+                                )) : (
+                                  <p className="text-gray-400 italic">No tag group files found in directory</p>
+                                )}
+                                {availableTagGroups.length > 0 && (
+                                  <p className="text-gray-400 italic mt-1">
+                                    Leave empty to use global rate.
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </>
@@ -1351,7 +1391,7 @@ export default function SimpleJob({
                                 <div className="pt-2">
                                   <label className="text-sm text-gray-400">Select Tag Groups to Shuffle</label>
                                   <div className="space-y-1 mt-1">
-                                    {['Artist', 'Character', 'Copyright', 'General', 'Meta', 'Model', 'Quality', 'Rating'].map(group => (
+                                    {availableTagGroups.length > 0 ? availableTagGroups.map(group => (
                                       <Checkbox
                                         key={group}
                                         label={group}
@@ -1364,7 +1404,9 @@ export default function SimpleJob({
                                           setJobConfig(newGroups, `config.process[0].datasets[${i}].shuffle_tag_groups`);
                                         }}
                                       />
-                                    ))}
+                                    )) : (
+                                      <p className="text-gray-400 italic">No tag group files found in directory</p>
+                                    )}
                                   </div>
                                 </div>
                                 <Checkbox
@@ -1401,13 +1443,6 @@ export default function SimpleJob({
                                   onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].shuffle_keep_first_n`)}
                                   placeholder="0"
                                   min={0}
-                                />
-                                <TextInput
-                                  label="Tag Group Directory"
-                                  className="pt-2"
-                                  value={dataset.tag_group_dir || 'taggroup'}
-                                  onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].tag_group_dir`)}
-                                  placeholder="taggroup"
                                 />
                               </>
                             )}
