@@ -472,14 +472,15 @@ class CaptionProcessingDTOMixin:
                 new_token_list = []
                 keep_first_n = self.dataset_config.tag_dropout_keep_first_n
                 
-                # Get tag group manager if using category-specific dropout
+                # Get tag group manager if using category-specific dropout or excluding person count tags
                 tag_group_manager = None
-                if self.dataset_config.tag_dropout_category_rates:
+                if self.dataset_config.tag_dropout_category_rates or self.dataset_config.tag_dropout_exclude_person_count:
                     # Check for cached TagGroupManager
                     if hasattr(self.dataset_config, '_tag_group_manager'):
                         tag_group_manager = self.dataset_config._tag_group_manager
                     else:
-                        from toolkit.tag_group_utils import TagNormalizationFormat, get_or_create_tag_group_manager
+                        # Import here but assign to local variables to avoid scope issues
+                        from toolkit.tag_group_utils import TagNormalizationFormat, get_or_create_tag_group_manager as get_tag_manager
                         norm_format = TagNormalizationFormat.SPACE_ESCAPED
                         if hasattr(self.dataset_config, 'tag_normalization_format'):
                             format_str = self.dataset_config.tag_normalization_format
@@ -490,7 +491,7 @@ class CaptionProcessingDTOMixin:
                             elif format_str == 'space_escaped':
                                 norm_format = TagNormalizationFormat.SPACE_ESCAPED
                         
-                        tag_group_manager = get_or_create_tag_group_manager(
+                        tag_group_manager = get_tag_manager(
                             self.dataset_config.tag_group_dir,
                             norm_format
                         )
