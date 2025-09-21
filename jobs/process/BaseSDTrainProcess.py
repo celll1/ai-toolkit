@@ -242,8 +242,11 @@ class BaseSDTrainProcess(BaseTrainProcess):
         )
 
         # fine_tuning here is for training actual SD network, not LoRA, embeddings, etc. it is (Dreambooth, etc)
+        # Full model fine-tuning (network_config.type='full') should also be considered fine-tuning
         self.is_fine_tuning = True
-        if self.network_config is not None or is_training_adapter or self.embed_config is not None or self.decorator_config is not None:
+        # Only set to False for LoRA-based training, not for full model fine-tuning
+        if ((self.network_config is not None and self.network_config.type.lower() != 'full') 
+            or is_training_adapter or self.embed_config is not None or self.decorator_config is not None):
             self.is_fine_tuning = False
 
         self.named_lora = False
@@ -534,11 +537,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
         # prepare meta
         save_meta = get_meta_for_safetensors(save_meta, self.job.name)
         
-        # Check if we're doing full model fine-tuning
-        is_full_model_training = (self.network_config is not None and 
-                                 self.network_config.type.lower() == 'full')
-        
-        if not self.is_fine_tuning and not is_full_model_training:
+        if not self.is_fine_tuning:
             if self.network is not None:
                 lora_name = self.job.name
                 if self.named_lora:
@@ -643,19 +642,6 @@ class BaseSDTrainProcess(BaseTrainProcess):
                         dtype=get_torch_dtype(self.save_config.dtype),
                         direct_save=direct_save
                     )
-        elif is_full_model_training:
-            # For full model fine-tuning, save the entire model
-            if self.save_config.save_format == "diffusers":
-                # saving as a folder path
-                file_path = file_path.replace('.safetensors', '')
-                # convert it back to normal object
-                save_meta = parse_metadata_from_safetensors(save_meta)
-            
-            self.sd.save(
-                file_path,
-                save_meta,
-                get_torch_dtype(self.save_config.dtype)
-            )
         else:
             if self.save_config.save_format == "diffusers":
                 # saving as a folder path
@@ -1801,7 +1787,6 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 network_kwargs = self.network_config.network_kwargs
                 is_lycoris = False
                 is_lorm = self.network_config.type.lower() == 'lorm'
-                is_full = self.network_config.type.lower() == 'full'
                 # default to LoCON if there are any conv layers or if it is named
                 NetworkClass = LoRASpecialNetwork
                 if self.network_config.type.lower() == 'locon' or self.network_config.type.lower() == 'lycoris':
@@ -1817,11 +1802,11 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 #     preset = PRESET['full']
                 # NetworkClass.apply_preset(preset)
                 
-                if not is_full:
-                    if hasattr(self.sd, 'target_lora_modules'):
-                        network_kwargs['target_lin_modules'] = self.sd.target_lora_modules
+                # Create LoRA network (now only for LoRA-based training)
+                if hasattr(self.sd, 'target_lora_modules'):
+                    network_kwargs['target_lin_modules'] = self.sd.target_lora_modules
 
-                    self.network = NetworkClass(
+                self.network = NetworkClass(
                         text_encoder=text_encoder,
                         unet=self.sd.get_model_to_train(),
                         lora_dim=self.network_config.linear,
@@ -1852,10 +1837,6 @@ class BaseSDTrainProcess(BaseTrainProcess):
                         base_model=self.sd,
                         **network_kwargs
                     )
-                else:
-                    # For full model fine-tuning, we don't create a network
-                    # The model itself will be trained directly
-                    self.network = None
 
 
                 # todo switch everything to proper mixed precision like this
@@ -1916,26 +1897,6 @@ class BaseSDTrainProcess(BaseTrainProcess):
 
                     if self.train_config.gradient_checkpointing:
                         self.network.enable_gradient_checkpointing()
-                else:
-                    # For full model fine-tuning, prepare params from the model directly
-                    print_acc("Setting up full model fine-tuning parameters...")
-                    # Set device state preset before getting params
-                    self.sd.set_device_state(self.get_params_device_state_preset)
-                    
-                    print_acc("Preparing full model parameters via sd.prepare_optimizer_params...")
-                    print_acc(f"train_unet: {self.train_config.train_unet}, train_text_encoder: {self.train_config.train_text_encoder}")
-                    # Prepare parameters from the model directly
-                    params = self.sd.prepare_optimizer_params(
-                        unet=self.train_config.train_unet,
-                        text_encoder=self.train_config.train_text_encoder,
-                        text_encoder_lr=self.train_config.lr,
-                        unet_lr=self.train_config.lr,
-                        default_lr=self.train_config.lr,
-                        refiner=self.train_config.train_refiner and self.sd.refiner_unet is not None,
-                        refiner_lr=self.train_config.refiner_lr,
-                    )
-                    print_acc(f"Prepared {len(params)} parameter groups for full model training")
-                    flush()
 
                 lora_name = self.name
                 # need to adapt name so they are not mixed up
@@ -2020,25 +1981,24 @@ class BaseSDTrainProcess(BaseTrainProcess):
 
             params = self.load_additional_training_modules(params)
 
-        else:  # no network, embedding or adapter
+        else:  # Full model training (traditional fine-tuning + full model fine-tuning)
+            print_acc("Setting up full model training parameters...")
             # set the device state preset before getting params
             self.sd.set_device_state(self.get_params_device_state_preset)
 
-            # params = self.get_params()
-            if len(params) == 0:
-                print_acc("Preparing full model parameters via sd.prepare_optimizer_params...")
-                print_acc(f"train_unet: {self.train_config.train_unet}, train_text_encoder: {self.train_config.train_text_encoder}")
-                # will only return savable weights and ones with grad
-                params = self.sd.prepare_optimizer_params(
-                    unet=self.train_config.train_unet,
-                    text_encoder=self.train_config.train_text_encoder,
-                    text_encoder_lr=self.train_config.lr,
-                    unet_lr=self.train_config.lr,
-                    default_lr=self.train_config.lr,
-                    refiner=self.train_config.train_refiner and self.sd.refiner_unet is not None,
-                    refiner_lr=self.train_config.refiner_lr,
-                )
-                print_acc(f"Prepared {len(params)} parameter groups for full model training")
+            print_acc("Preparing full model parameters via sd.prepare_optimizer_params...")
+            print_acc(f"train_unet: {self.train_config.train_unet}, train_text_encoder: {self.train_config.train_text_encoder}")
+            # Prepare parameters for full model training
+            params = self.sd.prepare_optimizer_params(
+                unet=self.train_config.train_unet,
+                text_encoder=self.train_config.train_text_encoder,
+                text_encoder_lr=self.train_config.lr,
+                unet_lr=self.train_config.lr,
+                default_lr=self.train_config.lr,
+                refiner=self.train_config.train_refiner and self.sd.refiner_unet is not None,
+                refiner_lr=self.train_config.refiner_lr,
+            )
+            print_acc(f"Prepared {len(params)} parameter groups for full model training")
             # we may be using it for prompt injections
             if self.adapter_config is not None and self.adapter is None:
                 self.setup_adapter()
