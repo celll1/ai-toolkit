@@ -251,6 +251,16 @@ class TagGroupManager:
             
             return result
     
+    def categorize_tags(self, tags: List[str]) -> Dict[str, List[str]]:
+        """タグリストをカテゴリごとに分類"""
+        categorized = {}
+        for tag in tags:
+            group = self.get_tag_group(tag.strip())
+            if group not in categorized:
+                categorized[group] = []
+            categorized[group].append(tag.strip())
+        return categorized
+    
     def clear_cache(self):
         """キャッシュをクリア"""
         self._tag_group_cache.clear()
