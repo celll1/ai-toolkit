@@ -821,6 +821,13 @@ export default function SimpleJob({
                       }
                     }}
                   />
+                  <Checkbox
+                    label="Train Text Encoder"
+                    checked={jobConfig.config.process[0].train.train_text_encoder || false}
+                    docKey={'train.train_text_encoder'}
+                    onChange={value => setJobConfig(value, 'config.process[0].train.train_text_encoder')}
+                    helpText="Apply LoRA training to the text encoder"
+                  />
                 </FormGroup>
               </div>
               <div>
