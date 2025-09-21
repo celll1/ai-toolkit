@@ -569,6 +569,7 @@ export default function SimpleJob({
               options={[
                 { value: 'lora', label: 'LoRA' },
                 { value: 'lokr', label: 'LoKr' },
+                { value: 'full', label: 'Full Model Fine-tuning' },
               ]}
             />
             {jobConfig.config.process[0].network?.type == 'lokr' && (

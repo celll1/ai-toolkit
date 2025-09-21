@@ -44,6 +44,7 @@ from toolkit.reference_adapter import ReferenceAdapter
 from toolkit.sampler import get_sampler
 from toolkit.saving import save_t2i_from_diffusers, load_t2i_model, save_ip_adapter_from_diffusers, \
     load_ip_adapter_model, load_custom_adapter_model
+from toolkit.metadata import parse_metadata_from_safetensors
 
 from toolkit.scheduler import get_lr_scheduler
 from toolkit.sd_device_states_presets import get_train_sd_device_state_preset
@@ -532,7 +533,12 @@ class BaseSDTrainProcess(BaseTrainProcess):
 
         # prepare meta
         save_meta = get_meta_for_safetensors(save_meta, self.job.name)
-        if not self.is_fine_tuning:
+        
+        # Check if we're doing full model fine-tuning
+        is_full_model_training = (self.network_config is not None and 
+                                 self.network_config.type.lower() == 'full')
+        
+        if not self.is_fine_tuning and not is_full_model_training:
             if self.network is not None:
                 lora_name = self.job.name
                 if self.named_lora:
@@ -637,6 +643,19 @@ class BaseSDTrainProcess(BaseTrainProcess):
                         dtype=get_torch_dtype(self.save_config.dtype),
                         direct_save=direct_save
                     )
+        elif is_full_model_training:
+            # For full model fine-tuning, save the entire model
+            if self.save_config.save_format == "diffusers":
+                # saving as a folder path
+                file_path = file_path.replace('.safetensors', '')
+                # convert it back to normal object
+                save_meta = parse_metadata_from_safetensors(save_meta)
+            
+            self.sd.save(
+                file_path,
+                save_meta,
+                get_torch_dtype(self.save_config.dtype)
+            )
         else:
             if self.save_config.save_format == "diffusers":
                 # saving as a folder path
@@ -1782,6 +1801,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 network_kwargs = self.network_config.network_kwargs
                 is_lycoris = False
                 is_lorm = self.network_config.type.lower() == 'lorm'
+                is_full = self.network_config.type.lower() == 'full'
                 # default to LoCON if there are any conv layers or if it is named
                 NetworkClass = LoRASpecialNetwork
                 if self.network_config.type.lower() == 'locon' or self.network_config.type.lower() == 'lycoris':
@@ -1797,61 +1817,70 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 #     preset = PRESET['full']
                 # NetworkClass.apply_preset(preset)
                 
-                if hasattr(self.sd, 'target_lora_modules'):
-                    network_kwargs['target_lin_modules'] = self.sd.target_lora_modules
+                if not is_full:
+                    if hasattr(self.sd, 'target_lora_modules'):
+                        network_kwargs['target_lin_modules'] = self.sd.target_lora_modules
 
-                self.network = NetworkClass(
-                    text_encoder=text_encoder,
-                    unet=self.sd.get_model_to_train(),
-                    lora_dim=self.network_config.linear,
-                    multiplier=1.0,
-                    alpha=self.network_config.linear_alpha,
-                    train_unet=self.train_config.train_unet,
-                    train_text_encoder=self.train_config.train_text_encoder,
-                    conv_lora_dim=self.network_config.conv,
-                    conv_alpha=self.network_config.conv_alpha,
-                    is_sdxl=self.model_config.is_xl or self.model_config.is_ssd,
-                    is_v2=self.model_config.is_v2,
-                    is_v3=self.model_config.is_v3,
-                    is_pixart=self.model_config.is_pixart,
-                    is_auraflow=self.model_config.is_auraflow,
-                    is_flux=self.model_config.is_flux,
-                    is_lumina2=self.model_config.is_lumina2,
-                    is_ssd=self.model_config.is_ssd,
-                    is_vega=self.model_config.is_vega,
-                    dropout=self.network_config.dropout,
-                    use_text_encoder_1=self.model_config.use_text_encoder_1,
-                    use_text_encoder_2=self.model_config.use_text_encoder_2,
-                    use_bias=is_lorm,
-                    is_lorm=is_lorm,
-                    network_config=self.network_config,
-                    network_type=self.network_config.type,
-                    transformer_only=self.network_config.transformer_only,
-                    is_transformer=self.sd.is_transformer,
-                    base_model=self.sd,
-                    **network_kwargs
-                )
+                    self.network = NetworkClass(
+                        text_encoder=text_encoder,
+                        unet=self.sd.get_model_to_train(),
+                        lora_dim=self.network_config.linear,
+                        multiplier=1.0,
+                        alpha=self.network_config.linear_alpha,
+                        train_unet=self.train_config.train_unet,
+                        train_text_encoder=self.train_config.train_text_encoder,
+                        conv_lora_dim=self.network_config.conv,
+                        conv_alpha=self.network_config.conv_alpha,
+                        is_sdxl=self.model_config.is_xl or self.model_config.is_ssd,
+                        is_v2=self.model_config.is_v2,
+                        is_v3=self.model_config.is_v3,
+                        is_pixart=self.model_config.is_pixart,
+                        is_auraflow=self.model_config.is_auraflow,
+                        is_flux=self.model_config.is_flux,
+                        is_lumina2=self.model_config.is_lumina2,
+                        is_ssd=self.model_config.is_ssd,
+                        is_vega=self.model_config.is_vega,
+                        dropout=self.network_config.dropout,
+                        use_text_encoder_1=self.model_config.use_text_encoder_1,
+                        use_text_encoder_2=self.model_config.use_text_encoder_2,
+                        use_bias=is_lorm,
+                        is_lorm=is_lorm,
+                        network_config=self.network_config,
+                        network_type=self.network_config.type,
+                        transformer_only=self.network_config.transformer_only,
+                        is_transformer=self.sd.is_transformer,
+                        base_model=self.sd,
+                        **network_kwargs
+                    )
+                else:
+                    # For full model fine-tuning, we don't create a network
+                    # The model itself will be trained directly
+                    self.network = None
 
 
                 # todo switch everything to proper mixed precision like this
-                self.network.force_to(self.device_torch, dtype=torch.float32)
-                # give network to sd so it can use it
-                self.sd.network = self.network
-                self.network._update_torch_multiplier()
+                if self.network is not None:
+                    self.network.force_to(self.device_torch, dtype=torch.float32)
+                    # give network to sd so it can use it
+                    self.sd.network = self.network
+                    self.network._update_torch_multiplier()
 
-                self.network.apply_to(
-                    text_encoder,
-                    unet,
-                    self.train_config.train_text_encoder,
-                    self.train_config.train_unet
-                )
+                    self.network.apply_to(
+                        text_encoder,
+                        unet,
+                        self.train_config.train_text_encoder,
+                        self.train_config.train_unet
+                    )
 
-                # we cannot merge in if quantized
-                if self.model_config.quantize:
-                    # todo find a way around this
-                    self.network.can_merge_in = False
+                    # we cannot merge in if quantized
+                    if self.model_config.quantize:
+                        # todo find a way around this
+                        self.network.can_merge_in = False
+                else:
+                    # For full model fine-tuning, set network to None in sd
+                    self.sd.network = None
 
-                if is_lorm:
+                if is_lorm and self.network is not None:
                     self.network.is_lorm = True
                     # make sure it is on the right device
                     self.sd.unet.to(self.sd.device, dtype=dtype)
@@ -1865,27 +1894,31 @@ class BaseSDTrainProcess(BaseTrainProcess):
                         num_replaced=len(self.network.get_all_modules()),
                     )
 
-                self.network.prepare_grad_etc(text_encoder, unet)
-                flush()
+                if self.network is not None:
+                    self.network.prepare_grad_etc(text_encoder, unet)
+                    flush()
 
-                # LyCORIS doesnt have default_lr
-                config = {
-                    'text_encoder_lr': self.train_config.lr,
-                    'unet_lr': self.train_config.lr,
-                }
-                sig = inspect.signature(self.network.prepare_optimizer_params)
-                if 'default_lr' in sig.parameters:
-                    config['default_lr'] = self.train_config.lr
-                if 'learning_rate' in sig.parameters:
-                    config['learning_rate'] = self.train_config.lr
-                params_net = self.network.prepare_optimizer_params(
-                    **config
-                )
+                    # LyCORIS doesnt have default_lr
+                    config = {
+                        'text_encoder_lr': self.train_config.lr,
+                        'unet_lr': self.train_config.lr,
+                    }
+                    sig = inspect.signature(self.network.prepare_optimizer_params)
+                    if 'default_lr' in sig.parameters:
+                        config['default_lr'] = self.train_config.lr
+                    if 'learning_rate' in sig.parameters:
+                        config['learning_rate'] = self.train_config.lr
+                    params_net = self.network.prepare_optimizer_params(
+                        **config
+                    )
 
-                params += params_net
+                    params += params_net
 
-                if self.train_config.gradient_checkpointing:
-                    self.network.enable_gradient_checkpointing()
+                    if self.train_config.gradient_checkpointing:
+                        self.network.enable_gradient_checkpointing()
+                else:
+                    # For full model fine-tuning, prepare params from the model directly
+                    flush()
 
                 lora_name = self.name
                 # need to adapt name so they are not mixed up
