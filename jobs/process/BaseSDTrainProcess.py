@@ -1918,6 +1918,9 @@ class BaseSDTrainProcess(BaseTrainProcess):
                         self.network.enable_gradient_checkpointing()
                 else:
                     # For full model fine-tuning, prepare params from the model directly
+                    print_acc("Setting up full model fine-tuning parameters...")
+                    # Ensure params will be prepared from model
+                    params = []  # Start with empty params list to trigger fallback
                     flush()
 
                 lora_name = self.name
@@ -1925,13 +1928,14 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 if self.named_lora:
                     lora_name = f"{lora_name}_LoRA"
 
-                latest_save_path = self.get_latest_save_path(lora_name)
-                extra_weights = None
-                if latest_save_path is not None:
-                    print_acc(f"#### IMPORTANT RESUMING FROM {latest_save_path} ####")
-                    print_acc(f"Loading from {latest_save_path}")
-                    extra_weights = self.load_weights(latest_save_path)
-                    self.network.multiplier = 1.0
+                if self.network is not None:
+                    latest_save_path = self.get_latest_save_path(lora_name)
+                    extra_weights = None
+                    if latest_save_path is not None:
+                        print_acc(f"#### IMPORTANT RESUMING FROM {latest_save_path} ####")
+                        print_acc(f"Loading from {latest_save_path}")
+                        extra_weights = self.load_weights(latest_save_path)
+                        self.network.multiplier = 1.0
 
             if self.embed_config is not None:
                 # we are doing embedding training as well
@@ -2008,6 +2012,8 @@ class BaseSDTrainProcess(BaseTrainProcess):
 
             # params = self.get_params()
             if len(params) == 0:
+                print_acc("Preparing full model parameters via sd.prepare_optimizer_params...")
+                print_acc(f"train_unet: {self.train_config.train_unet}, train_text_encoder: {self.train_config.train_text_encoder}")
                 # will only return savable weights and ones with grad
                 params = self.sd.prepare_optimizer_params(
                     unet=self.train_config.train_unet,
@@ -2018,6 +2024,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     refiner=self.train_config.train_refiner and self.sd.refiner_unet is not None,
                     refiner_lr=self.train_config.refiner_lr,
                 )
+                print_acc(f"Prepared {len(params)} parameter groups for full model training")
             # we may be using it for prompt injections
             if self.adapter_config is not None and self.adapter is None:
                 self.setup_adapter()
