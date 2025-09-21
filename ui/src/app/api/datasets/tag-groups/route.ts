@@ -8,9 +8,10 @@ export async function GET(request: NextRequest) {
     const tagGroupDir = searchParams.get('dir') || 'taggroup';
     
     // Build the full path
+    // For relative paths, use ai-toolkit root directory (parent of ui)
     const fullPath = path.isAbsolute(tagGroupDir) 
       ? tagGroupDir 
-      : path.join(process.cwd(), tagGroupDir);
+      : path.join(process.cwd(), '..', tagGroupDir);
     
     // Check if directory exists
     if (!fs.existsSync(fullPath)) {
