@@ -256,3 +256,22 @@ class TagGroupManager:
         self._tag_group_cache.clear()
         self._person_tag_cache.clear()
         self._normalized_tag_cache.clear()
+
+
+# Global singleton manager instance
+_global_tag_manager: Optional[TagGroupManager] = None
+
+
+def get_or_create_tag_group_manager(tag_group_dir: str = 'taggroup', 
+                                  normalization_format: TagNormalizationFormat = TagNormalizationFormat.SPACE_ESCAPED) -> TagGroupManager:
+    """タググループマネージャーのシングルトンインスタンスを取得または作成"""
+    global _global_tag_manager
+    
+    if _global_tag_manager is None:
+        _global_tag_manager = TagGroupManager(tag_group_dir, normalization_format)
+    elif (_global_tag_manager.tag_group_dir != tag_group_dir or 
+          _global_tag_manager.normalization_format != normalization_format):
+        # 設定が変わった場合は新しいインスタンスを作成
+        _global_tag_manager = TagGroupManager(tag_group_dir, normalization_format)
+    
+    return _global_tag_manager
