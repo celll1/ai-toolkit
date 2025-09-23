@@ -831,27 +831,36 @@ export default function SimpleJob({
                   />
                   {jobConfig.config.process[0].train.train_text_encoder && (
                     <div className="mt-2 ml-4 space-y-2">
-                      <NumberInput
-                        label="Text Encoder 1 LR"
-                        value={jobConfig.config.process[0].train.text_encoder_1_lr || jobConfig.config.process[0].train.lr}
-                        onChange={value => setJobConfig(value, 'config.process[0].train.text_encoder_1_lr')}
-                        placeholder={`Default: ${jobConfig.config.process[0].train.lr}`}
-                        min={0}
-                      />
-                      <NumberInput
-                        label="Text Encoder 2 LR"
-                        value={jobConfig.config.process[0].train.text_encoder_2_lr || jobConfig.config.process[0].train.lr}
-                        onChange={value => setJobConfig(value, 'config.process[0].train.text_encoder_2_lr')}
-                        placeholder={`Default: ${jobConfig.config.process[0].train.lr}`}
-                        min={0}
-                      />
-                      <NumberInput
-                        label="Text Encoder 3 LR"
-                        value={jobConfig.config.process[0].train.text_encoder_3_lr || jobConfig.config.process[0].train.lr}
-                        onChange={value => setJobConfig(value, 'config.process[0].train.text_encoder_3_lr')}
-                        placeholder={`Default: ${jobConfig.config.process[0].train.lr}`}
-                        min={0}
-                      />
+                      {(() => {
+                        // Get number of text encoders for current model, default to 3 if unknown
+                        const textEncoderCount = modelArch?.textEncoderCount || 3;
+                        const encoders = [];
+                        
+                        for (let i = 1; i <= textEncoderCount; i++) {
+                          let currentValue: number;
+                          if (i === 1) {
+                            currentValue = jobConfig.config.process[0].train.text_encoder_1_lr || jobConfig.config.process[0].train.lr;
+                          } else if (i === 2) {
+                            currentValue = jobConfig.config.process[0].train.text_encoder_2_lr || jobConfig.config.process[0].train.lr;
+                          } else if (i === 3) {
+                            currentValue = jobConfig.config.process[0].train.text_encoder_3_lr || jobConfig.config.process[0].train.lr;
+                          } else {
+                            currentValue = jobConfig.config.process[0].train.lr;
+                          }
+                          
+                          encoders.push(
+                            <NumberInput
+                              key={i}
+                              label={`Text Encoder ${i} LR`}
+                              value={currentValue}
+                              onChange={value => setJobConfig(value, `config.process[0].train.text_encoder_${i}_lr`)}
+                              placeholder={`Default: ${jobConfig.config.process[0].train.lr}`}
+                              min={0}
+                            />
+                          );
+                        }
+                        return encoders;
+                      })()}
                     </div>
                   )}
                 </FormGroup>

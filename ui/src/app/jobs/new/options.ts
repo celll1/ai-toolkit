@@ -22,6 +22,7 @@ export interface ModelArch {
   disableSections?: DisableableSections[];
   additionalSections?: AdditionalSections[];
   accuracyRecoveryAdapters?: { [key: string]: string };
+  textEncoderCount?: number; // Number of text encoders for this model architecture
 }
 
 const defaultNameOrPath = '';
@@ -31,6 +32,7 @@ export const modelArchs: ModelArch[] = [
     name: 'flux',
     label: 'FLUX.1',
     group: 'image',
+    textEncoderCount: 1, // FLUX has 1 text encoder
     defaults: {
       // default updates when [selected, unselected] in the UI
       'config.process[0].model.name_or_path': ['black-forest-labs/FLUX.1-dev', defaultNameOrPath],
@@ -285,6 +287,7 @@ export const modelArchs: ModelArch[] = [
     name: 'qwen_image',
     label: 'Qwen-Image',
     group: 'image',
+    textEncoderCount: 1, // Qwen-Image has 1 text encoder
     defaults: {
       // default updates when [selected, unselected] in the UI
       'config.process[0].model.name_or_path': ['Qwen/Qwen-Image', defaultNameOrPath],
@@ -342,6 +345,7 @@ export const modelArchs: ModelArch[] = [
     name: 'sdxl',
     label: 'SDXL',
     group: 'image',
+    textEncoderCount: 2, // SDXL has 2 text encoders
     defaults: {
       // default updates when [selected, unselected] in the UI
       'config.process[0].model.name_or_path': ['stabilityai/stable-diffusion-xl-base-1.0', defaultNameOrPath],
@@ -357,6 +361,7 @@ export const modelArchs: ModelArch[] = [
     name: 'sd15',
     label: 'SD 1.5',
     group: 'image',
+    textEncoderCount: 1, // SD 1.5 has 1 text encoder
     defaults: {
       // default updates when [selected, unselected] in the UI
       'config.process[0].model.name_or_path': ['stable-diffusion-v1-5/stable-diffusion-v1-5', defaultNameOrPath],

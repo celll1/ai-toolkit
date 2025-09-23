@@ -446,7 +446,15 @@ class SDTrainer(BaseSDTrainProcess):
                     # scale so it is a mean of 1
                     prior_mask_multiplier = prior_mask_multiplier / prior_mask_multiplier.mean()
                 if self.sd.is_flow_matching:
-                    target = (noise - batch.latents).detach()
+                    # Handle multi-noise timestep case where noise shape might be larger than batch.latents
+                    if noise.shape[0] != batch.latents.shape[0]:
+                        # Expand batch.latents to match noise size (for multi-noise timestep)
+                        batch_size = batch.latents.shape[0]
+                        multi_factor = noise.shape[0] // batch_size
+                        expanded_latents = batch.latents.repeat_interleave(multi_factor, dim=0)
+                        target = (noise - expanded_latents).detach()
+                    else:
+                        target = (noise - batch.latents).detach()
                 else:
                     target = noise
         elif prior_pred is not None and not self.train_config.do_prior_divergence:
@@ -466,7 +474,15 @@ class SDTrainer(BaseSDTrainProcess):
             
         elif self.sd.is_flow_matching:
             # forward ODE
-            target = (noise - batch.latents).detach()
+            # Handle multi-noise timestep case where noise shape might be larger than batch.latents
+            if noise.shape[0] != batch.latents.shape[0]:
+                # Expand batch.latents to match noise size (for multi-noise timestep)
+                batch_size = batch.latents.shape[0]
+                multi_factor = noise.shape[0] // batch_size
+                expanded_latents = batch.latents.repeat_interleave(multi_factor, dim=0)
+                target = (noise - expanded_latents).detach()
+            else:
+                target = (noise - batch.latents).detach()
             # reverse ODE
             # target = (batch.latents - noise).detach()
         else:
