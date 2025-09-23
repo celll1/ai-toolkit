@@ -102,6 +102,11 @@ def main():
             if is_job_stop:
                 print_acc(f"Job stopped by user request")
                 jobs_completed += 1  # Count as completed, not failed
+                # Still call on_error to ensure proper cleanup and status updates
+                try:
+                    job.process[0].on_error(e)
+                except Exception as e2:
+                    print_acc(f"Error during job stop cleanup: {e2}")
             else:
                 print_acc(f"Error running job: {e}")
                 jobs_failed += 1
