@@ -394,6 +394,13 @@ export default function SimpleJob({
               }}
               placeholder="e.g., output/.tensorboard (optional)"
             />
+            <NumberInput
+              label="TensorBoard Log Every"
+              value={jobConfig.config.process[0].performance_log_every}
+              onChange={value => setJobConfig(value, 'config.process[0].performance_log_every')}
+              placeholder="e.g., 10 (log every N steps)"
+              min={0}
+            />
             <TextInput
               label="Trigger Word"
               value={jobConfig.config.process[0].trigger_word || ''}
