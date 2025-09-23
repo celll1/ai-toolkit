@@ -227,8 +227,11 @@ class UITrainer(SDTrainer):
         self.update_status("running", "Training")
 
     def save(self, step=None):
-        self.maybe_stop()
+        # Skip stop checks during interrupt handling save
+        if not getattr(self, 'is_stopping', False):
+            self.maybe_stop()
         self.update_status("running", "Saving model")
         super().save(step)
-        self.maybe_stop()
+        if not getattr(self, 'is_stopping', False):
+            self.maybe_stop()
         self.update_status("running", "Training")
