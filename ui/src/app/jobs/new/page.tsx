@@ -25,6 +25,7 @@ export default function TrainingForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const runId = searchParams.get('id');
+  const configParam = searchParams.get('config');
   const [gpuIDs, setGpuIDs] = useState<string | null>(null);
   const { settings, isSettingsLoaded } = useSettings();
   const { gpuList, isGPUInfoLoaded } = useGPUInfo();
@@ -69,8 +70,17 @@ export default function TrainingForm() {
           setJobConfig(migrateJobConfig(JSON.parse(data.job_config)));
         })
         .catch(error => console.error('Error fetching training:', error));
+    } else if (configParam) {
+      // Load config from URL parameter (for copying jobs)
+      try {
+        const decodedConfig = JSON.parse(decodeURIComponent(configParam));
+        const migratedConfig = migrateJobConfig(decodedConfig);
+        setJobConfig(migratedConfig);
+      } catch (error) {
+        console.error('Error parsing config from URL:', error);
+      }
     }
-  }, [runId]);
+  }, [runId, configParam]);
 
   useEffect(() => {
     if (isGPUInfoLoaded) {

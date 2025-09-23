@@ -1,9 +1,10 @@
 import Link from 'next/link';
-import { Eye, Trash2, Pen, Play, Pause } from 'lucide-react';
+import { Eye, Trash2, Pen, Play, Pause, Copy } from 'lucide-react';
 import { Button } from '@headlessui/react';
 import { openConfirm } from '@/components/ConfirmModal';
 import { Job } from '@prisma/client';
 import { startJob, stopJob, deleteJob, getAvaliableJobActions } from '@/utils/jobs';
+import { useRouter } from 'next/navigation';
 
 interface JobActionBarProps {
   job: Job;
@@ -15,8 +16,20 @@ interface JobActionBarProps {
 
 export default function JobActionBar({ job, onRefresh, afterDelete, className, hideView }: JobActionBarProps) {
   const { canStart, canStop, canDelete, canEdit } = getAvaliableJobActions(job);
+  const router = useRouter();
 
   if (!afterDelete) afterDelete = onRefresh;
+
+  const handleCopyJob = () => {
+    // Parse the job config to create a copy with modified name
+    const jobConfig = JSON.parse(job.job_config);
+    jobConfig.meta.name = `${jobConfig.meta.name}_copy`;
+    jobConfig.config.name = `${jobConfig.config.name}_copy`;
+    
+    // Encode the config and navigate to new job page with the config
+    const encodedConfig = encodeURIComponent(JSON.stringify(jobConfig));
+    router.push(`/jobs/new?config=${encodedConfig}`);
+  };
 
   return (
     <div className={`${className}`}>
@@ -62,6 +75,13 @@ export default function JobActionBar({ job, onRefresh, afterDelete, className, h
           <Pen />
         </Link>
       )}
+      <Button
+        onClick={handleCopyJob}
+        className="ml-2 hover:text-gray-100"
+        title="Copy job configuration"
+      >
+        <Copy />
+      </Button>
       <Button
         onClick={() => {
           let message = `Are you sure you want to delete the job "${job.name}"? This will also permanently remove it from your disk.`;
