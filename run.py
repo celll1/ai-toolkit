@@ -97,15 +97,21 @@ def main():
             job.cleanup()
             jobs_completed += 1
         except Exception as e:
-            print_acc(f"Error running job: {e}")
-            jobs_failed += 1
-            try:
-                job.process[0].on_error(e)
-            except Exception as e2:
-                print_acc(f"Error running on_error: {e2}")
-            if not args.recover:
-                print_end_message(jobs_completed, jobs_failed)
-                raise e
+            # Handle UITrainer's "Job stopped" as a successful completion, not an error
+            is_job_stop = str(e) == "Job stopped"
+            if is_job_stop:
+                print_acc(f"Job stopped by user request")
+                jobs_completed += 1  # Count as completed, not failed
+            else:
+                print_acc(f"Error running job: {e}")
+                jobs_failed += 1
+                try:
+                    job.process[0].on_error(e)
+                except Exception as e2:
+                    print_acc(f"Error running on_error: {e2}")
+                if not args.recover:
+                    print_end_message(jobs_completed, jobs_failed)
+                    raise e
         except KeyboardInterrupt as e:
             try:
                 job.process[0].on_error(e)

@@ -829,6 +829,31 @@ export default function SimpleJob({
                     onChange={value => setJobConfig(value, 'config.process[0].train.train_text_encoder')}
                     helpText="Apply LoRA training to the text encoder"
                   />
+                  {jobConfig.config.process[0].train.train_text_encoder && (
+                    <div className="mt-2 ml-4 space-y-2">
+                      <NumberInput
+                        label="Text Encoder 1 LR"
+                        value={jobConfig.config.process[0].train.text_encoder_1_lr || jobConfig.config.process[0].train.lr}
+                        onChange={value => setJobConfig(value, 'config.process[0].train.text_encoder_1_lr')}
+                        placeholder={`Default: ${jobConfig.config.process[0].train.lr}`}
+                        min={0}
+                      />
+                      <NumberInput
+                        label="Text Encoder 2 LR"
+                        value={jobConfig.config.process[0].train.text_encoder_2_lr || jobConfig.config.process[0].train.lr}
+                        onChange={value => setJobConfig(value, 'config.process[0].train.text_encoder_2_lr')}
+                        placeholder={`Default: ${jobConfig.config.process[0].train.lr}`}
+                        min={0}
+                      />
+                      <NumberInput
+                        label="Text Encoder 3 LR"
+                        value={jobConfig.config.process[0].train.text_encoder_3_lr || jobConfig.config.process[0].train.lr}
+                        onChange={value => setJobConfig(value, 'config.process[0].train.text_encoder_3_lr')}
+                        placeholder={`Default: ${jobConfig.config.process[0].train.lr}`}
+                        min={0}
+                      />
+                    </div>
+                  )}
                 </FormGroup>
               </div>
               <div>

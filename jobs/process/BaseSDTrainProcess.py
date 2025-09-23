@@ -495,15 +495,8 @@ class BaseSDTrainProcess(BaseTrainProcess):
         is_job_stop = isinstance(e, Exception) and str(e) == "Job stopped"
         is_keyboard_interrupt = isinstance(e, KeyboardInterrupt)
         
-        if (is_job_stop or is_keyboard_interrupt) and self.save_config.save_on_interrupt:
-            print_acc("")
-            if is_job_stop:
-                print_acc("Training stopped by user request. Saving current state...")
-            else:
-                print_acc("Training interrupted by user. Saving current state...")
-            if self.accelerator.is_main_process:
-                self.save(self.step_num)
-                print_acc(f"Model saved at step {self.step_num}")
+        # Note: Save handling is now done in the main run() method's exception handler
+        # to avoid duplicate saves. This method only handles error logging.
 
     def save(self, step=None):
         if not self.accelerator.is_main_process:
@@ -1993,6 +1986,9 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 unet=self.train_config.train_unet,
                 text_encoder=self.train_config.train_text_encoder,
                 text_encoder_lr=self.train_config.lr,
+                text_encoder_1_lr=self.train_config.text_encoder_1_lr,
+                text_encoder_2_lr=self.train_config.text_encoder_2_lr,
+                text_encoder_3_lr=self.train_config.text_encoder_3_lr,
                 unet_lr=self.train_config.lr,
                 default_lr=self.train_config.lr,
                 refiner=self.train_config.train_refiner and self.sd.refiner_unet is not None,

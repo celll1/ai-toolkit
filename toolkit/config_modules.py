@@ -328,6 +328,10 @@ class TrainConfig:
         self.lr = kwargs.get('lr', 1e-6)
         self.unet_lr = kwargs.get('unet_lr', self.lr)
         self.text_encoder_lr = kwargs.get('text_encoder_lr', self.lr)
+        # Individual text encoder learning rates for multi-encoder models (SDXL, SD3, etc)
+        self.text_encoder_1_lr = kwargs.get('text_encoder_1_lr', self.text_encoder_lr)
+        self.text_encoder_2_lr = kwargs.get('text_encoder_2_lr', self.text_encoder_lr)
+        self.text_encoder_3_lr = kwargs.get('text_encoder_3_lr', self.text_encoder_lr)  # For SD3
         self.refiner_lr = kwargs.get('refiner_lr', self.lr)
         self.embedding_lr = kwargs.get('embedding_lr', self.lr)
         self.adapter_lr = kwargs.get('adapter_lr', self.lr)

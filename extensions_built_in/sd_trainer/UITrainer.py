@@ -73,10 +73,11 @@ class UITrainer(SDTrainer):
 
     def maybe_stop(self):
         if self.should_stop():
-            self._run_async_operation(
-                self._update_status("stopped", "Job stopped"))
-            self.is_stopping = True
-            raise Exception("Job stopped")
+            if not self.is_stopping:
+                self.is_stopping = True
+                # Update status and wait for it to complete before raising exception
+                asyncio.run(self._update_status("stopped", "Job stopped"))
+                raise Exception("Job stopped")
 
     async def _update_key(self, key, value):
         if not self.accelerator.is_main_process:
@@ -155,9 +156,14 @@ class UITrainer(SDTrainer):
             self._async_tasks.clear()
 
     def on_error(self, e: Exception):
+        # Call parent method but don't do duplicate save handling
         super(UITrainer, self).on_error(e)
-        if self.accelerator.is_main_process and not self.is_stopping:
+        
+        # Only update error status if it's a real error (not a stop request)
+        is_job_stop = isinstance(e, Exception) and str(e) == "Job stopped"
+        if self.accelerator.is_main_process and not is_job_stop and not self.is_stopping:
             self.update_status("error", str(e))
+        
         self.update_db_key("step", self.last_save_step)
         asyncio.run(self.wait_for_all_async())
         self.thread_pool.shutdown(wait=True)

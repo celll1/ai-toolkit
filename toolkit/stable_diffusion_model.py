@@ -2837,6 +2837,9 @@ class StableDiffusion:
             unet=False,
             text_encoder=False,
             text_encoder_lr=None,
+            text_encoder_1_lr=None,  # Individual LR for text encoder 1
+            text_encoder_2_lr=None,  # Individual LR for text encoder 2  
+            text_encoder_3_lr=None,  # Individual LR for text encoder 3 (SD3)
             unet_lr=None,
             refiner_lr=None,
             refiner=False,
@@ -2878,17 +2881,51 @@ class StableDiffusion:
             print_acc(f"Found {len(params)} trainable parameter in unet")
 
         if text_encoder:
-            named_params = self.named_parameters(vae=False, unet=False, text_encoder=text_encoder, state_dict_keys=True)
-            text_encoder_lr = text_encoder_lr if text_encoder_lr is not None else default_lr
-            params = []
-            for key, diffusers_key in ldm_diffusers_keymap.items():
-                if diffusers_key in named_params and diffusers_key not in DO_NOT_TRAIN_WEIGHTS:
-                    if named_params[diffusers_key].requires_grad:
-                        params.append(named_params[diffusers_key])
-            param_data = {"params": params, "lr": text_encoder_lr}
-            trainable_parameters.append(param_data)
-
-            print_acc(f"Found {len(params)} trainable parameter in text encoder")
+            # Check if we have multiple text encoders (SDXL, SD3)
+            if isinstance(self.text_encoder, list):
+                # Handle multiple text encoders with individual LRs
+                for i, te in enumerate(self.text_encoder):
+                    # Skip disabled encoders
+                    if self.is_xl and i == 0 and not self.use_text_encoder_1:
+                        continue
+                    if self.is_xl and i == 1 and not self.use_text_encoder_2:
+                        continue
+                    
+                    # Get individual LR for this encoder
+                    if i == 0:
+                        individual_lr = text_encoder_1_lr if text_encoder_1_lr is not None else text_encoder_lr
+                    elif i == 1:
+                        individual_lr = text_encoder_2_lr if text_encoder_2_lr is not None else text_encoder_lr
+                    elif i == 2:
+                        individual_lr = text_encoder_3_lr if text_encoder_3_lr is not None else text_encoder_lr
+                    else:
+                        individual_lr = text_encoder_lr
+                    
+                    individual_lr = individual_lr if individual_lr is not None else default_lr
+                    
+                    # Get parameters for this specific encoder
+                    prefix = f"text_encoder_{i+1}_" if i > 0 else "text_encoder_"
+                    params = []
+                    for param_name, param in te.named_parameters():
+                        if param.requires_grad:
+                            params.append(param)
+                    
+                    if params:
+                        param_data = {"params": params, "lr": individual_lr}
+                        trainable_parameters.append(param_data)
+                        print_acc(f"Found {len(params)} trainable parameters in text encoder {i+1} (LR: {individual_lr})")
+            else:
+                # Single text encoder (SD1.5, SD2.x)
+                named_params = self.named_parameters(vae=False, unet=False, text_encoder=text_encoder, state_dict_keys=True)
+                text_encoder_lr = text_encoder_lr if text_encoder_lr is not None else default_lr
+                params = []
+                for key, diffusers_key in ldm_diffusers_keymap.items():
+                    if diffusers_key in named_params and diffusers_key not in DO_NOT_TRAIN_WEIGHTS:
+                        if named_params[diffusers_key].requires_grad:
+                            params.append(named_params[diffusers_key])
+                param_data = {"params": params, "lr": text_encoder_lr}
+                trainable_parameters.append(param_data)
+                print_acc(f"Found {len(params)} trainable parameters in text encoder (LR: {text_encoder_lr})")
 
         if refiner:
             named_params = self.named_parameters(vae=False, unet=False, text_encoder=False, refiner=True,
