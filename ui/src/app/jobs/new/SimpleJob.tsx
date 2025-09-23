@@ -629,6 +629,16 @@ export default function SimpleJob({
                 { value: 'fp32', label: 'FP32' },
               ]}
             />
+            <SelectInput
+              label="Save Format"
+              value={jobConfig.config.process[0].save.save_format}
+              onChange={value => setJobConfig(value, 'config.process[0].save.save_format')}
+              options={[
+                { value: 'safetensors', label: 'SafeTensors (Single File)' },
+                { value: 'diffusers', label: 'Diffusers (Multiple Files)' },
+              ]}
+              helpText="SafeTensors: Single .safetensors file. Diffusers: Multiple files and folders structure."
+            />
             <NumberInput
               label="Save Every"
               value={jobConfig.config.process[0].save.save_every}
