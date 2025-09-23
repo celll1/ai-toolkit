@@ -2366,7 +2366,9 @@ class BaseSDTrainProcess(BaseTrainProcess):
                             if self.progress_bar is not None:
                                 self.progress_bar.unpause()
 
-                        if self.logging_config.log_every and self.step_num % self.logging_config.log_every == 0:
+                        # Use performance_log_every for TensorBoard logging instead of logging_config.log_every
+                        tensorboard_log_interval = self.performance_log_every if self.performance_log_every > 0 else (self.logging_config.log_every if self.logging_config.log_every else 100)
+                        if tensorboard_log_interval and self.step_num % tensorboard_log_interval == 0:
                             if self.progress_bar is not None:
                                 self.progress_bar.pause()
                             with self.timer('log_to_tensorboard'):
@@ -2378,7 +2380,9 @@ class BaseSDTrainProcess(BaseTrainProcess):
                                         self.writer.add_scalar(f"lr", learning_rate, self.step_num)
                                     if self.progress_bar is not None:
                                         self.progress_bar.unpause()
-                            
+                        
+                        # Separate condition for general logging (wandb, etc.) - keep original behavior
+                        if self.logging_config.log_every and self.step_num % self.logging_config.log_every == 0:
                             if self.accelerator.is_main_process:
                                 # log to logger
                                 self.logger.log({
