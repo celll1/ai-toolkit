@@ -55,7 +55,8 @@ class SDTrainer(BaseSDTrainProcess):
         super().__init__(process_id, job, config, **kwargs)
         self.assistant_adapter: Union['T2IAdapter', 'ControlNetModel', None]
         self.do_prior_prediction = False
-        self.do_long_prompts = False
+        # Use the enable_long_prompts setting from train_config
+        self.do_long_prompts = self.train_config.enable_long_prompts if hasattr(self.train_config, 'enable_long_prompts') else False
         self.do_guided_loss = False
         self.taesd: Optional[AutoencoderTiny] = None
 

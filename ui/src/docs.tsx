@@ -364,6 +364,23 @@ const docs: { [key: string]: ConfigDoc } = {
       </>
     ),
   },
+  'train.enable_long_prompts': {
+    title: 'Enable Long Prompts',
+    description: (
+      <>
+        <strong>SDXL Only:</strong> Enables support for prompts longer than 75 tokens.
+        <br />
+        When enabled, prompts exceeding 77 tokens will be split into chunks and processed separately, 
+        then concatenated. This allows for prompts up to ~300 tokens (77×4).
+        <br />
+        <strong>Note:</strong> This increases VRAM usage and processing time. Similar to how Automatic1111 
+        handles long prompts in SDXL.
+        <br />
+        <strong>Technical:</strong> Each 77-token chunk is processed through the CLIP text encoder separately, 
+        and the embeddings are concatenated in the sequence dimension.
+      </>
+    ),
+  },
 };
 
 export const getDoc = (key: string | null | undefined): ConfigDoc | null => {

@@ -411,6 +411,10 @@ class TrainConfig:
         # if above is NOT true, this will make it so the long caption foes to te2 and the short caption goes to te1 for sdxl only
         self.short_and_long_captions_encoder_split = kwargs.get('short_and_long_captions_encoder_split', False)
 
+        # Enable long prompts support (>75 tokens) for SDXL models
+        # When enabled, prompts longer than 77 tokens will be split into chunks and processed separately
+        self.enable_long_prompts = kwargs.get('enable_long_prompts', False)
+
         # basically gradient accumulation but we run just 1 item through the network
         # and accumulate gradients. This can be used as basic gradient accumulation but is very helpful
         # for training tricks that increase batch size but need a single gradient step

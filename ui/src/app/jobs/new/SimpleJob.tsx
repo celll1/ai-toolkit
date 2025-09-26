@@ -846,6 +846,15 @@ export default function SimpleJob({
                     onChange={value => setJobConfig(value, 'config.process[0].train.train_text_encoder')}
                     helpText="Apply LoRA training to the text encoder"
                   />
+                  {modelArch?.name === 'SDXL' && (
+                    <Checkbox
+                      label="Enable Long Prompts (>75 tokens)"
+                      checked={jobConfig.config.process[0].train.enable_long_prompts || false}
+                      docKey={'train.enable_long_prompts'}
+                      onChange={value => setJobConfig(value, 'config.process[0].train.enable_long_prompts')}
+                      helpText="Allow prompts longer than 75 tokens by splitting into chunks (SDXL only)"
+                    />
+                  )}
                   {jobConfig.config.process[0].train.train_text_encoder && (
                     <div className="mt-2 ml-4 space-y-2">
                       {(() => {
