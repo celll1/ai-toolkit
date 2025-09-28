@@ -159,10 +159,15 @@ class UITrainer(SDTrainer):
         # Call parent method but don't do duplicate save handling
         super(UITrainer, self).on_error(e)
         
-        # Only update error status if it's a real error (not a stop request)
+        # Handle status updates properly for both errors and stops
         is_job_stop = isinstance(e, Exception) and str(e) == "Job stopped"
-        if self.accelerator.is_main_process and not is_job_stop and not self.is_stopping:
-            self.update_status("error", str(e))
+        if self.accelerator.is_main_process:
+            if is_job_stop or self.is_stopping:
+                # Ensure stopped status is set even if already set in maybe_stop
+                self.update_status("stopped", "Job stopped")
+            else:
+                # Real error occurred
+                self.update_status("error", str(e))
         
         self.update_db_key("step", self.last_save_step)
         asyncio.run(self.wait_for_all_async())
