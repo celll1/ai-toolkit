@@ -1369,33 +1369,29 @@ export default function SimpleJob({
                               <label className="block text-sm font-medium text-gray-200 mb-1">
                                 Category-Specific Dropout Rates
                               </label>
-                              <div className="space-y-2 text-xs">
+                              <div className="space-y-2">
                                 {availableTagGroups.length > 0 ? availableTagGroups.map(category => (
-                                  <div key={category} className="flex items-center space-x-2">
-                                    <label className="w-20 text-gray-300">{category}:</label>
-                                    <input
-                                      type="number"
-                                      className="flex-1 px-2 py-1 bg-gray-700 text-gray-200 rounded"
-                                      value={dataset.tag_dropout_category_rates?.[category] || ''}
-                                      onChange={e => {
-                                        const value = parseFloat(e.target.value);
-                                        const currentRates = dataset.tag_dropout_category_rates || {};
-                                        if (e.target.value === '' || isNaN(value)) {
-                                          delete currentRates[category];
-                                        } else {
-                                          currentRates[category] = Math.min(1, Math.max(0, value));
-                                        }
-                                        setJobConfig(
-                                          Object.keys(currentRates).length > 0 ? currentRates : {},
-                                          `config.process[0].datasets[${i}].tag_dropout_category_rates`
-                                        );
-                                      }}
-                                      placeholder="default"
-                                      min={0}
-                                      max={1}
-                                      step={0.05}
-                                    />
-                                  </div>
+                                  <NumberInput
+                                    key={category}
+                                    label={category}
+                                    value={dataset.tag_dropout_category_rates?.[category] ?? ''}
+                                    onChange={value => {
+                                      const currentRates = { ...dataset.tag_dropout_category_rates } || {};
+                                      if (value === '' || value === null || value === undefined) {
+                                        delete currentRates[category];
+                                      } else {
+                                        currentRates[category] = value;
+                                      }
+                                      setJobConfig(
+                                        Object.keys(currentRates).length > 0 ? currentRates : {},
+                                        `config.process[0].datasets[${i}].tag_dropout_category_rates`
+                                      );
+                                    }}
+                                    placeholder="default"
+                                    min={0}
+                                    max={1}
+                                    step={0.01}
+                                  />
                                 )) : (
                                   <p className="text-gray-400 italic">No tag group files found in directory</p>
                                 )}
