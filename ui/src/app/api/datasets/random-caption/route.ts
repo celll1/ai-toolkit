@@ -56,15 +56,15 @@ function getRandomCaption(
     let imageBaseName = path.parse(randomImagePath).name;
     let imageDir = path.dirname(randomImagePath);
 
-    // For paired files mode, filter to target files only
-    if (datasetConfig?.paired_files && datasetConfig.target_suffix) {
-      const targetFiles = imageFiles.filter(file => {
+    // For paired files mode, filter to source files only (for control images)
+    if (datasetConfig?.paired_files && datasetConfig.source_suffix) {
+      const sourceFiles = imageFiles.filter(file => {
         const name = path.parse(file).name;
-        return name.includes(datasetConfig.target_suffix);
+        return name.includes(datasetConfig.source_suffix);
       });
 
-      if (targetFiles.length > 0) {
-        randomImagePath = targetFiles[Math.floor(Math.random() * targetFiles.length)];
+      if (sourceFiles.length > 0) {
+        randomImagePath = sourceFiles[Math.floor(Math.random() * sourceFiles.length)];
         imageBaseName = path.parse(randomImagePath).name;
         imageDir = path.dirname(randomImagePath);
       }
@@ -81,17 +81,10 @@ function getRandomCaption(
     // Find control image
     let controlImagePath: string | undefined;
 
-    if (datasetConfig?.paired_files && datasetConfig.source_suffix && datasetConfig.target_suffix) {
-      // Paired files mode: replace target suffix with source suffix
-      const sourceName = imageBaseName.replace(datasetConfig.target_suffix, datasetConfig.source_suffix);
-      for (const ext of IMAGE_EXTENSIONS) {
-        const sourceImagePath = path.join(imageDir, sourceName + ext);
-        if (fs.existsSync(sourceImagePath)) {
-          controlImagePath = sourceImagePath;
-          console.log(`[Random Caption] Found paired control image: ${controlImagePath}`);
-          break;
-        }
-      }
+    if (datasetConfig?.paired_files && datasetConfig.source_suffix) {
+      // Paired files mode: the selected source file IS the control image
+      controlImagePath = randomImagePath;
+      console.log(`[Random Caption] Using selected source file as control image: ${controlImagePath}`);
     } else if (datasetConfig?.control_path) {
       // Separate control_path mode
       for (const ext of IMAGE_EXTENSIONS) {
@@ -107,9 +100,9 @@ function getRandomCaption(
     // Look for corresponding caption file
     let captionBaseName = imageBaseName;
 
-    // For paired files, replace target suffix with instruction suffix
-    if (datasetConfig?.paired_files && datasetConfig.instruction_suffix && datasetConfig.target_suffix) {
-      captionBaseName = imageBaseName.replace(datasetConfig.target_suffix, datasetConfig.instruction_suffix);
+    // For paired files, replace source suffix with instruction suffix
+    if (datasetConfig?.paired_files && datasetConfig.instruction_suffix && datasetConfig.source_suffix) {
+      captionBaseName = imageBaseName.replace(datasetConfig.source_suffix, datasetConfig.instruction_suffix);
       console.log(`[Random Caption] Caption base name (after suffix replacement): ${captionBaseName}`);
     } else {
       console.log(`[Random Caption] Caption base name: ${captionBaseName}`);
