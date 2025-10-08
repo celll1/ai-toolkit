@@ -6,7 +6,22 @@ import { getDatasetsRoot } from '@/server/settings';
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff'];
 const CAPTION_EXTENSIONS = ['.txt', '.caption', '.json'];
 
-function getRandomCaption(datasetPath: string): string | null {
+interface RandomCaptionResult {
+  caption: string;
+  imagePath?: string;
+  controlImagePath?: string;
+}
+
+function getRandomCaption(
+  datasetPath: string,
+  datasetConfig?: {
+    paired_files?: boolean;
+    source_suffix?: string;
+    target_suffix?: string;
+    instruction_suffix?: string;
+    control_path?: string;
+  }
+): RandomCaptionResult | null {
   try {
     const files = fs.readdirSync(datasetPath, { withFileTypes: true });
     const imageFiles: string[] = [];
@@ -36,16 +51,63 @@ function getRandomCaption(datasetPath: string): string | null {
     }
     
     // Randomly select an image file
-    const randomImagePath = imageFiles[Math.floor(Math.random() * imageFiles.length)];
-    const imageBaseName = path.parse(randomImagePath).name;
-    const imageDir = path.dirname(randomImagePath);
-    
+    let randomImagePath = imageFiles[Math.floor(Math.random() * imageFiles.length)];
+    let imageBaseName = path.parse(randomImagePath).name;
+    let imageDir = path.dirname(randomImagePath);
+
+    // For paired files mode, filter to target files only
+    if (datasetConfig?.paired_files && datasetConfig.target_suffix) {
+      const targetFiles = imageFiles.filter(file => {
+        const name = path.parse(file).name;
+        return name.includes(datasetConfig.target_suffix);
+      });
+
+      if (targetFiles.length > 0) {
+        randomImagePath = targetFiles[Math.floor(Math.random() * targetFiles.length)];
+        imageBaseName = path.parse(randomImagePath).name;
+        imageDir = path.dirname(randomImagePath);
+      }
+    }
+
     console.log(`[Random Caption] Selected image: ${randomImagePath}`);
     console.log(`[Random Caption] Looking for captions with base name: ${imageBaseName}`);
-    
+
+    // Find control image
+    let controlImagePath: string | undefined;
+
+    if (datasetConfig?.paired_files && datasetConfig.source_suffix && datasetConfig.target_suffix) {
+      // Paired files mode: replace target suffix with source suffix
+      const sourceName = imageBaseName.replace(datasetConfig.target_suffix, datasetConfig.source_suffix);
+      for (const ext of IMAGE_EXTENSIONS) {
+        const sourceImagePath = path.join(imageDir, sourceName + ext);
+        if (fs.existsSync(sourceImagePath)) {
+          controlImagePath = sourceImagePath;
+          console.log(`[Random Caption] Found paired control image: ${controlImagePath}`);
+          break;
+        }
+      }
+    } else if (datasetConfig?.control_path) {
+      // Separate control_path mode
+      for (const ext of IMAGE_EXTENSIONS) {
+        const controlPath = path.join(datasetConfig.control_path, imageBaseName + ext);
+        if (fs.existsSync(controlPath)) {
+          controlImagePath = controlPath;
+          console.log(`[Random Caption] Found control image: ${controlImagePath}`);
+          break;
+        }
+      }
+    }
+
     // Look for corresponding caption file
+    let captionBaseName = imageBaseName;
+
+    // For paired files, replace target suffix with instruction suffix
+    if (datasetConfig?.paired_files && datasetConfig.instruction_suffix && datasetConfig.target_suffix) {
+      captionBaseName = imageBaseName.replace(datasetConfig.target_suffix, datasetConfig.instruction_suffix);
+    }
+
     for (const captionExt of CAPTION_EXTENSIONS) {
-      const captionPath = path.join(imageDir, imageBaseName + captionExt);
+      const captionPath = path.join(imageDir, captionBaseName + captionExt);
       
       if (fs.existsSync(captionPath)) {
         try {
@@ -69,7 +131,11 @@ function getRandomCaption(datasetPath: string): string | null {
             if (caption && typeof caption === 'string' && caption.trim()) {
               console.log(`[Random Caption] Found caption file: ${captionPath}`);
               console.log(`[Random Caption] Caption content: ${caption}`);
-              return caption.trim();
+              return {
+                caption: caption.trim(),
+                imagePath: randomImagePath,
+                controlImagePath
+              };
             }
           }
         } catch (error) {
@@ -80,7 +146,11 @@ function getRandomCaption(datasetPath: string): string | null {
     
     // If no caption file found, return the image filename without extension as fallback
     console.log(`[Random Caption] No caption file found, using filename as fallback: ${imageBaseName}`);
-    return imageBaseName.replace(/[_-]/g, ' ');
+    return {
+      caption: imageBaseName.replace(/[_-]/g, ' '),
+      imagePath: randomImagePath,
+      controlImagePath
+    };
     
   } catch (error) {
     console.error(`Error getting random caption from ${datasetPath}:`, error);
@@ -90,17 +160,18 @@ function getRandomCaption(datasetPath: string): string | null {
 
 export async function POST(request: NextRequest) {
   try {
-    const { datasetName } = await request.json();
-    
+    const { datasetName, datasetConfig } = await request.json();
+
     console.log(`[Random Caption] Requested dataset: ${datasetName}`);
-    
+    console.log(`[Random Caption] Dataset config:`, datasetConfig);
+
     if (!datasetName) {
       return NextResponse.json({ error: 'Dataset name is required' }, { status: 400 });
     }
-    
+
     const datasetsRoot = await getDatasetsRoot();
     let datasetPath = path.join(datasetsRoot, datasetName);
-    
+
     console.log(`[Random Caption] Initial dataset path: ${datasetPath}`);
     
     if (!fs.existsSync(datasetPath)) {
@@ -129,13 +200,13 @@ export async function POST(request: NextRequest) {
       console.log(`[Random Caption] Using local dataset path: ${datasetPath}`);
     }
     
-    const caption = getRandomCaption(datasetPath);
-    
-    if (!caption) {
+    const result = getRandomCaption(datasetPath, datasetConfig);
+
+    if (!result) {
       return NextResponse.json({ error: 'No captions found in dataset' }, { status: 404 });
     }
-    
-    return NextResponse.json({ caption });
+
+    return NextResponse.json(result);
     
   } catch (error) {
     console.error('Error fetching random caption:', error);

@@ -271,28 +271,50 @@ export default function SimpleJob({
       alert('No datasets selected. Please add a dataset first.');
       return;
     }
-    
+
     // Get a random dataset from the selected ones
     const randomDataset = datasets[Math.floor(Math.random() * datasets.length)];
     const datasetName = randomDataset.folder_path.split(/[/\\]/).pop();
-    
+
     if (!datasetName) {
       alert('Invalid dataset selected.');
       return;
     }
-    
+
+    // Check if we're in ControlNet mode
+    const isControlNet =
+      jobConfig.config.process[0].network?.type === 'controlnet' ||
+      jobConfig.config.process[0].network?.type === 'controlnet_lllite';
+
     try {
-      const response = await apiClient.post('/api/datasets/random-caption', {
-        datasetName: datasetName
-      });
-      
-      const { caption } = response.data;
-      
-      // Add the caption as a new sample
-      setJobConfig(
-        [...jobConfig.config.process[0].sample.samples, { prompt: caption }],
-        'config.process[0].sample.samples'
-      );
+      // Pass dataset config to API if in ControlNet mode
+      const requestBody: any = { datasetName };
+
+      if (isControlNet) {
+        // Include dataset config for control image lookup
+        requestBody.datasetConfig = {
+          paired_files: randomDataset.paired_files,
+          source_suffix: randomDataset.source_suffix,
+          target_suffix: randomDataset.target_suffix,
+          instruction_suffix: randomDataset.instruction_suffix,
+          control_path: randomDataset.control_path
+        };
+      }
+
+      const response = await apiClient.post('/api/datasets/random-caption', requestBody);
+
+      const { caption, controlImagePath } = response.data;
+
+      // Create new sample with caption and control image if available
+      const newSample: any = { prompt: caption };
+
+      if (isControlNet && controlImagePath) {
+        newSample.ctrl_img = controlImagePath;
+        console.log('Added sample with control image:', controlImagePath);
+      }
+
+      // Add the sample
+      setJobConfig([...jobConfig.config.process[0].sample.samples, newSample], 'config.process[0].sample.samples');
     } catch (error) {
       console.error('Error fetching random caption:', error);
       alert('Failed to fetch random prompt from dataset. Please try again.');
