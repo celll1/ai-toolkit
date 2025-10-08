@@ -60,6 +60,14 @@ export interface NetworkConfig {
   network_kwargs: {
     ignore_if_contains: string[];
   };
+  // ControlNet specific
+  controlnet_conditioning_channels?: number;
+  controlnet_conditioning_embedding_out_channels?: number[];
+  // ControlNet-LLLite specific
+  lllite_depth?: number;
+  lllite_hidden_dim?: number;
+  lllite_cond_emb_dim?: number;
+  lllite_target_modules?: string[];
 }
 
 export interface SaveConfig {
