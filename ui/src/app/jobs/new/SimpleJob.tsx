@@ -294,9 +294,9 @@ export default function SimpleJob({
         // Include dataset config for control image lookup
         requestBody.datasetConfig = {
           paired_files: randomDataset.paired_files,
-          source_suffix: randomDataset.source_suffix,
-          target_suffix: randomDataset.target_suffix,
-          instruction_suffix: randomDataset.instruction_suffix,
+          source_suffix: randomDataset.source_suffix || '_source',
+          target_suffix: randomDataset.target_suffix || '_target',
+          instruction_suffix: randomDataset.instruction_suffix || '_instruction',
           control_path: randomDataset.control_path,
           caption_ext: randomDataset.caption_ext
         };
