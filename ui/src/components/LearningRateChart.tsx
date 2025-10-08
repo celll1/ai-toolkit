@@ -17,8 +17,43 @@ export default function LearningRateChart({ data, isLoading = false }: LearningR
     step: point.step,
     lr: point.value
   }));
-  
-  // Format Y-axis tick labels - use decimal notation for better readability
+
+  // Calculate nice Y-axis ticks with round numbers
+  const calculateNiceTicks = (dataMin: number, dataMax: number, maxTicks: number = 5): number[] => {
+    if (dataMin === dataMax) return [dataMin];
+
+    const range = dataMax - dataMin;
+    const roughStep = range / (maxTicks - 1);
+
+    // Find nice step size (1, 2, 5, 10, 20, 50, 100, etc.)
+    const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+    const normalized = roughStep / magnitude;
+    let niceStep;
+
+    if (normalized < 1.5) niceStep = 1 * magnitude;
+    else if (normalized < 3) niceStep = 2 * magnitude;
+    else if (normalized < 7) niceStep = 5 * magnitude;
+    else niceStep = 10 * magnitude;
+
+    // Generate ticks starting from floor and going up
+    const ticks: number[] = [];
+    const start = Math.floor(dataMin / niceStep) * niceStep;
+    const end = Math.ceil(dataMax / niceStep) * niceStep;
+
+    for (let tick = start; tick <= end; tick += niceStep) {
+      ticks.push(tick);
+    }
+
+    return ticks;
+  };
+
+  // Get data range for Y-axis
+  const allValues = chartData.map(d => d.lr);
+  const dataMin = allValues.length > 0 ? Math.min(...allValues) : 0;
+  const dataMax = allValues.length > 0 ? Math.max(...allValues) : 1;
+  const niceTicks = calculateNiceTicks(dataMin, dataMax);
+
+  // Format Y-axis tick labels
   const formatYAxis = (value: number) => {
     if (value === 0) return '0';
     if (Math.abs(value) >= 0.1) {
@@ -26,8 +61,7 @@ export default function LearningRateChart({ data, isLoading = false }: LearningR
     } else if (Math.abs(value) >= 0.00001) {
       return value.toFixed(6);
     } else {
-      // For very small values, use scientific notation
-      return value.toExponential(1);
+      return value.toFixed(8);
     }
   };
 
@@ -60,7 +94,8 @@ export default function LearningRateChart({ data, isLoading = false }: LearningR
                 fontSize={11}
                 tickLine={false}
                 axisLine={false}
-                domain={['auto', 'auto']}
+                domain={[niceTicks[0], niceTicks[niceTicks.length - 1]]}
+                ticks={niceTicks}
                 tickFormatter={formatYAxis}
                 width={70}
               />
