@@ -328,6 +328,46 @@ for img_path in tqdm(list(input_dir.glob('*.jpg'))):
     control_img.save(output_dir / img_path.name)
 ```
 
+## Sample Generation with Control Images
+
+**IMPORTANT**: When training ControlNet, you must provide control images during sampling to properly validate your model. Text-only prompts will not work correctly.
+
+### Configuring Samples with Control Images
+
+Instead of using simple `prompts`, use the `samples` format with `ctrl_img`:
+
+```yaml
+sample:
+  sampler: flowmatch
+  sample_every: 500
+  width: 1024
+  height: 1024
+  # Use 'samples' with ctrl_img for ControlNet
+  samples:
+    - prompt: "a photo of a person standing"
+      ctrl_img: "/path/to/control/test_image1.jpg"  # Control image path
+      seed: 42
+    - prompt: "a scenic landscape"
+      ctrl_img: "/path/to/control/test_image2.jpg"
+      seed: 43
+  guidance_scale: 4
+  sample_steps: 20
+```
+
+### In the UI
+
+1. Add sample prompts as usual
+2. Click the "Add Control Image" button next to each prompt
+3. Select a control image from your dataset or upload a new one
+4. The control image will be used during sampling to guide the generation
+
+### Tips for Sample Control Images
+
+- Use control images from your test set (not training set)
+- Use diverse control conditions to validate different scenarios
+- Keep the same control images across training to see progress
+- Ensure control images match the resolution specified in your config
+
 ## Training Tips
 
 ### 1. Learning Rate
@@ -348,9 +388,11 @@ for img_path in tqdm(list(input_dir.glob('*.jpg'))):
 ### 4. Monitoring
 
 Check sample images regularly:
-- Control should be visible in generated images
+- **Control should be visible** in generated images
+- **Structure should match** the control image (edges, depth, pose, etc.)
 - Should not overfit (losing creativity)
 - Quality should improve over time
+- **Compare samples** using the same control images across training steps
 
 ### 5. Data Quality
 

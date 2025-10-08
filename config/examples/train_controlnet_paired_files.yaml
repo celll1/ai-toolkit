@@ -67,8 +67,14 @@ config:
         sample_every: 500
         width: 1024
         height: 1024
-        prompts:
-          - "a photo of a person standing"
-          - "a scenic landscape"
+        # For ControlNet with paired files, use 'samples' with ctrl_img
+        samples:
+          - prompt: "a photo of a person standing"
+            ctrl_img: "/path/to/output_data/sample1_source.png"  # Source/control image
+            seed: 42
+          - prompt: "a scenic landscape"
+            ctrl_img: "/path/to/output_data/sample2_source.png"
+            seed: 43
+        neg: ""
         guidance_scale: 4
         sample_steps: 20

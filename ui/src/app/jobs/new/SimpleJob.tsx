@@ -1774,30 +1774,32 @@ export default function SimpleJob({
                         />
                       </div>
 
-                      {modelArch?.additionalSections?.includes('sample.ctrl_img') && (
-                        <div
-                          className="h-14 w-14 mt-2 ml-4 border border-gray-500 flex items-center justify-center rounded cursor-pointer hover:bg-gray-700 transition-colors"
-                          style={{
-                            backgroundImage: sample.ctrl_img
-                              ? `url(${`/api/img/${encodeURIComponent(sample.ctrl_img)}`})`
-                              : 'none',
-                            backgroundSize: 'cover',
-                            backgroundPosition: 'center',
-                            marginBottom: '-1rem',
-                          }}
-                          onClick={() => {
-                            openAddImageModal(imagePath => {
-                              console.log('Selected image path:', imagePath);
-                              if (!imagePath) return;
-                              setJobConfig(imagePath, `config.process[0].sample.samples[${i}].ctrl_img`);
-                            });
-                          }}
-                        >
-                          {!sample.ctrl_img && (
-                            <div className="text-gray-400 text-xs text-center font-bold">Add Control Image</div>
-                          )}
-                        </div>
-                      )}
+                      {(modelArch?.additionalSections?.includes('sample.ctrl_img') ||
+                        jobConfig.config.process[0].network?.type === 'controlnet' ||
+                        jobConfig.config.process[0].network?.type === 'controlnet_lllite') && (
+                          <div
+                            className="h-14 w-14 mt-2 ml-4 border border-gray-500 flex items-center justify-center rounded cursor-pointer hover:bg-gray-700 transition-colors"
+                            style={{
+                              backgroundImage: sample.ctrl_img
+                                ? `url(${`/api/img/${encodeURIComponent(sample.ctrl_img)}`})`
+                                : 'none',
+                              backgroundSize: 'cover',
+                              backgroundPosition: 'center',
+                              marginBottom: '-1rem',
+                            }}
+                            onClick={() => {
+                              openAddImageModal(imagePath => {
+                                console.log('Selected image path:', imagePath);
+                                if (!imagePath) return;
+                                setJobConfig(imagePath, `config.process[0].sample.samples[${i}].ctrl_img`);
+                              });
+                            }}
+                          >
+                            {!sample.ctrl_img && (
+                              <div className="text-gray-400 text-xs text-center font-bold">Add Control Image</div>
+                            )}
+                          </div>
+                        )}
                     </div>
                     <div className="pb-4"></div>
                   </div>

@@ -75,13 +75,18 @@ config:
         sample_every: 500
         width: 1024
         height: 1024
-        prompts:
-          - "a photo of a person standing"
-          - "a photo of a cat sitting"
-          - "a scenic landscape"
+        # For ControlNet, use 'samples' with ctrl_img instead of simple 'prompts'
+        samples:
+          - prompt: "a photo of a person standing"
+            ctrl_img: "/path/to/control/test_image1.jpg"  # Control image for this sample
+            seed: 42
+          - prompt: "a photo of a cat sitting"
+            ctrl_img: "/path/to/control/test_image2.jpg"
+            seed: 43
+          - prompt: "a scenic landscape"
+            ctrl_img: "/path/to/control/test_image3.jpg"
+            seed: 44
         neg: ""
-        seed: 42
-        walk_seed: true
         guidance_scale: 4
         sample_steps: 20
 
