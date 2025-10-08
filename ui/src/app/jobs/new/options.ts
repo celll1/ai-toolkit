@@ -356,6 +356,7 @@ export const modelArchs: ModelArch[] = [
       'config.process[0].sample.guidance_scale': [6, 4],
     },
     disableSections: ['model.quantize', 'train.timestep_type'],
+    additionalSections: ['datasets.control_path'],
   },
   {
     name: 'sd15',
@@ -372,6 +373,7 @@ export const modelArchs: ModelArch[] = [
       'config.process[0].sample.guidance_scale': [6, 4],
     },
     disableSections: ['model.quantize', 'train.timestep_type'],
+    additionalSections: ['datasets.control_path'],
   },
   {
     name: 'omnigen2',
