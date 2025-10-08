@@ -1,0 +1,91 @@
+job: extension
+config:
+  # Model configuration
+  name: my_controlnet_sdxl
+  process:
+    - type: sd_trainer
+      training_folder: output/controlnet_training
+
+      # Device settings
+      device: cuda:0
+
+      # Trigger word (optional)
+      # trigger_word: "mycontrol"
+
+      # Network configuration for ControlNet
+      network:
+        type: controlnet  # or 'controlnet_lllite' for lightweight version
+        # ControlNet specific settings
+        controlnet_conditioning_channels: 3  # 3 for RGB images (depth, canny, etc.)
+        # Optional: customize conditioning embedding channels
+        # controlnet_conditioning_embedding_out_channels: [16, 32, 96, 256]
+
+      # Save configuration
+      save:
+        dtype: float16
+        save_every: 500
+        max_step_saves_to_keep: 5
+        save_format: safetensors  # or 'diffusers'
+
+      # Dataset configuration
+      datasets:
+        - folder_path: "/path/to/training/images"
+          caption_ext: "txt"
+          caption_dropout_rate: 0.05
+          shuffle_tokens: false
+          cache_latents_to_disk: true
+          cache_latents: true
+          resolution: [1024, 1024]
+
+          # Control image path (depth maps, canny edges, etc.)
+          control_path: "/path/to/control/images"
+
+      # Train configuration
+      train:
+        noise_scheduler: flowmatch
+        optimizer: adamw8bit
+        lr: 1e-5
+        ema_config:
+          use_ema: true
+          ema_decay: 0.999
+
+        # Training settings
+        batch_size: 1
+        steps: 10000
+        gradient_accumulation_steps: 1
+        train_unet: false  # ControlNet trains its own network, not the base UNet
+        train_text_encoder: false
+
+        # Memory optimization
+        gradient_checkpointing: true
+        noise_offset: 0.0
+
+        # Data type
+        dtype: bf16
+
+      # Model configuration
+      model:
+        name_or_path: "stabilityai/stable-diffusion-xl-base-1.0"
+        is_xl: true
+        quantize: true
+
+      # Sample configuration
+      sample:
+        sampler: flowmatch
+        sample_every: 500
+        width: 1024
+        height: 1024
+        prompts:
+          - "a photo of a person standing"
+          - "a photo of a cat sitting"
+          - "a scenic landscape"
+        neg: ""
+        seed: 42
+        walk_seed: true
+        guidance_scale: 4
+        sample_steps: 20
+
+# Additional meta information
+meta:
+  name: "[name]"
+  version: "1.0"

@@ -1,0 +1,96 @@
+job: extension
+config:
+  # Model configuration
+  name: my_controlnet_lllite_sdxl
+  process:
+    - type: sd_trainer
+      training_folder: output/controlnet_lllite_training
+
+      # Device settings
+      device: cuda:0
+
+      # Trigger word (optional)
+      # trigger_word: "mycontrol"
+
+      # Network configuration for ControlNet-LLLite (lightweight)
+      network:
+        type: controlnet_lllite  # Lightweight ControlNet
+        # LLLite specific settings
+        lllite_depth: 2  # Depth of control modules (2-3 recommended)
+        lllite_hidden_dim: 1024  # Hidden dimension
+        lllite_cond_emb_dim: 768  # Conditioning embedding dimension
+        # Optional: specify which UNet blocks to attach to
+        # lllite_target_modules:
+        #   - "down_blocks.0"
+        #   - "down_blocks.1"
+        #   - "mid_block"
+        #   - "up_blocks.0"
+        #   - "up_blocks.1"
+
+      # Save configuration
+      save:
+        dtype: float16
+        save_every: 500
+        max_step_saves_to_keep: 5
+        save_format: safetensors
+
+      # Dataset configuration
+      datasets:
+        - folder_path: "/path/to/training/images"
+          caption_ext: "txt"
+          caption_dropout_rate: 0.05
+          shuffle_tokens: false
+          cache_latents_to_disk: true
+          cache_latents: true
+          resolution: [1024, 1024]
+
+          # Control image path (depth maps, canny edges, etc.)
+          control_path: "/path/to/control/images"
+
+      # Train configuration
+      train:
+        noise_scheduler: flowmatch
+        optimizer: adamw8bit
+        lr: 1e-4  # LLLite can use higher learning rate
+
+        # Training settings
+        batch_size: 2  # LLLite uses less memory
+        steps: 10000
+        gradient_accumulation_steps: 1
+        train_unet: false  # LLLite trains small modules, not the base UNet
+        train_text_encoder: false
+
+        # Memory optimization
+        gradient_checkpointing: true
+        noise_offset: 0.0
+
+        # Data type
+        dtype: bf16
+
+      # Model configuration
+      model:
+        name_or_path: "stabilityai/stable-diffusion-xl-base-1.0"
+        is_xl: true
+        quantize: true  # Can use quantization with LLLite
+
+      # Sample configuration
+      sample:
+        sampler: flowmatch
+        sample_every: 500
+        width: 1024
+        height: 1024
+        prompts:
+          - "a photo of a person standing"
+          - "a photo of a cat sitting"
+          - "a scenic landscape"
+        neg: ""
+        seed: 42
+        walk_seed: true
+        guidance_scale: 4
+        sample_steps: 20
+
+# Additional meta information
+meta:
+  name: "[name]"
+  version: "1.0"
+  description: "ControlNet-LLLite training - lightweight alternative to full ControlNet"

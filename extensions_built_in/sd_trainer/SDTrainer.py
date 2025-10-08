@@ -1505,6 +1505,28 @@ class SDTrainer(BaseSDTrainProcess):
                 # flush()
                 pred_kwargs = {}
 
+                # Handle ControlNet
+                if self.network is not None:
+                    from toolkit.models.controlnet_train import ControlNetNetwork, ControlNetLLLiteNetwork
+                    if isinstance(self.network, ControlNetNetwork):
+                        # ControlNet needs control images
+                        if has_adapter_img:
+                            with torch.set_grad_enabled(True):
+                                controlnet_output = self.network(
+                                    sample=noisy_latents,
+                                    timestep=timesteps,
+                                    encoder_hidden_states=conditional_embeds.text_embeds,
+                                    controlnet_cond=adapter_images,
+                                    conditioning_scale=1.0,
+                                )
+                                if controlnet_output is not None:
+                                    pred_kwargs['down_block_additional_residuals'] = controlnet_output['down_block_res_samples']
+                                    pred_kwargs['mid_block_additional_residual'] = controlnet_output['mid_block_res_sample']
+                    elif isinstance(self.network, ControlNetLLLiteNetwork):
+                        # ControlNet-LLLite hooks into UNet forward
+                        if has_adapter_img:
+                            self.network.set_cond_image(adapter_images)
+
                 if has_adapter_img:
                     if (self.adapter and isinstance(self.adapter, T2IAdapter)) or (
                             self.assistant_adapter and isinstance(self.assistant_adapter, T2IAdapter)):

@@ -143,7 +143,7 @@ class LoRMConfig:
         })
 
 
-NetworkType = Literal['lora', 'locon', 'lorm', 'lokr', 'full']
+NetworkType = Literal['lora', 'locon', 'lorm', 'lokr', 'full', 'controlnet', 'controlnet_lllite']
 
 
 class NetworkConfig:
@@ -177,7 +177,7 @@ class NetworkConfig:
                 self.conv = 4
 
         self.transformer_only = kwargs.get('transformer_only', True)
-        
+
         self.lokr_full_rank = kwargs.get('lokr_full_rank', False)
         if self.lokr_full_rank and self.type.lower() == 'lokr':
             self.linear = 9999999999
@@ -186,9 +186,21 @@ class NetworkConfig:
             self.conv_alpha = 9999999999
         # -1 automatically finds the largest factor
         self.lokr_factor = kwargs.get('lokr_factor', -1)
-        
+
         # for multi stage models
         self.split_multistage_loras = kwargs.get('split_multistage_loras', True)
+
+        # ControlNet specific settings
+        self.controlnet_conditioning_channels: int = kwargs.get('controlnet_conditioning_channels', 3)
+        self.controlnet_conditioning_embedding_out_channels: Optional[List[int]] = kwargs.get(
+            'controlnet_conditioning_embedding_out_channels', None
+        )
+
+        # ControlNet-LLLite specific settings
+        self.lllite_target_modules: Optional[List[str]] = kwargs.get('lllite_target_modules', None)
+        self.lllite_depth: int = kwargs.get('lllite_depth', 2)
+        self.lllite_hidden_dim: int = kwargs.get('lllite_hidden_dim', 1024)
+        self.lllite_cond_emb_dim: int = kwargs.get('lllite_cond_emb_dim', 768)
 
 
 AdapterTypes = Literal['t2i', 'ip', 'ip+', 'clip', 'ilora', 'photo_maker', 'control_net', 'control_lora', 'i2v']

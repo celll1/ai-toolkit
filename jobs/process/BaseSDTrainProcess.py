@@ -1780,11 +1780,20 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 network_kwargs = self.network_config.network_kwargs
                 is_lycoris = False
                 is_lorm = self.network_config.type.lower() == 'lorm'
+                is_controlnet = self.network_config.type.lower() == 'controlnet'
+                is_controlnet_lllite = self.network_config.type.lower() == 'controlnet_lllite'
+
                 # default to LoCON if there are any conv layers or if it is named
                 NetworkClass = LoRASpecialNetwork
                 if self.network_config.type.lower() == 'locon' or self.network_config.type.lower() == 'lycoris':
                     NetworkClass = LycorisSpecialNetwork
                     is_lycoris = True
+                elif is_controlnet:
+                    from toolkit.models.controlnet_train import ControlNetNetwork
+                    NetworkClass = ControlNetNetwork
+                elif is_controlnet_lllite:
+                    from toolkit.models.controlnet_train import ControlNetLLLiteNetwork
+                    NetworkClass = ControlNetLLLiteNetwork
 
                 if is_lorm:
                     network_kwargs['ignore_if_contains'] = lorm_ignore_if_contains
@@ -1794,57 +1803,84 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 # if is_lycoris:
                 #     preset = PRESET['full']
                 # NetworkClass.apply_preset(preset)
-                
-                # Create LoRA network (now only for LoRA-based training)
-                if hasattr(self.sd, 'target_lora_modules'):
-                    network_kwargs['target_lin_modules'] = self.sd.target_lora_modules
 
-                self.network = NetworkClass(
-                        text_encoder=text_encoder,
-                        unet=self.sd.get_model_to_train(),
-                        lora_dim=self.network_config.linear,
-                        multiplier=1.0,
-                        alpha=self.network_config.linear_alpha,
-                        train_unet=self.train_config.train_unet,
-                        train_text_encoder=self.train_config.train_text_encoder,
-                        conv_lora_dim=self.network_config.conv,
-                        conv_alpha=self.network_config.conv_alpha,
-                        is_sdxl=self.model_config.is_xl or self.model_config.is_ssd,
-                        is_v2=self.model_config.is_v2,
-                        is_v3=self.model_config.is_v3,
-                        is_pixart=self.model_config.is_pixart,
-                        is_auraflow=self.model_config.is_auraflow,
-                        is_flux=self.model_config.is_flux,
-                        is_lumina2=self.model_config.is_lumina2,
-                        is_ssd=self.model_config.is_ssd,
-                        is_vega=self.model_config.is_vega,
-                        dropout=self.network_config.dropout,
-                        use_text_encoder_1=self.model_config.use_text_encoder_1,
-                        use_text_encoder_2=self.model_config.use_text_encoder_2,
-                        use_bias=is_lorm,
-                        is_lorm=is_lorm,
-                        network_config=self.network_config,
-                        network_type=self.network_config.type,
-                        transformer_only=self.network_config.transformer_only,
-                        is_transformer=self.sd.is_transformer,
-                        base_model=self.sd,
-                        **network_kwargs
-                    )
+                # Create network based on type
+                if is_controlnet or is_controlnet_lllite:
+                    # Create ControlNet or ControlNet-LLLite network
+                    if is_controlnet:
+                        self.network = NetworkClass(
+                            unet=self.sd.unet,
+                            controlnet_conditioning_channel=self.network_config.controlnet_conditioning_channels,
+                            conditioning_embedding_out_channels=self.network_config.controlnet_conditioning_embedding_out_channels,
+                            **network_kwargs
+                        )
+                    else:  # is_controlnet_lllite
+                        self.network = NetworkClass(
+                            unet=self.sd.unet,
+                            target_modules=self.network_config.lllite_target_modules,
+                            depth=self.network_config.lllite_depth,
+                            hidden_dim=self.network_config.lllite_hidden_dim,
+                            cond_emb_dim=self.network_config.lllite_cond_emb_dim,
+                            **network_kwargs
+                        )
+                else:
+                    # Create LoRA network (now only for LoRA-based training)
+                    if hasattr(self.sd, 'target_lora_modules'):
+                        network_kwargs['target_lin_modules'] = self.sd.target_lora_modules
+
+                    self.network = NetworkClass(
+                            text_encoder=text_encoder,
+                            unet=self.sd.get_model_to_train(),
+                            lora_dim=self.network_config.linear,
+                            multiplier=1.0,
+                            alpha=self.network_config.linear_alpha,
+                            train_unet=self.train_config.train_unet,
+                            train_text_encoder=self.train_config.train_text_encoder,
+                            conv_lora_dim=self.network_config.conv,
+                            conv_alpha=self.network_config.conv_alpha,
+                            is_sdxl=self.model_config.is_xl or self.model_config.is_ssd,
+                            is_v2=self.model_config.is_v2,
+                            is_v3=self.model_config.is_v3,
+                            is_pixart=self.model_config.is_pixart,
+                            is_auraflow=self.model_config.is_auraflow,
+                            is_flux=self.model_config.is_flux,
+                            is_lumina2=self.model_config.is_lumina2,
+                            is_ssd=self.model_config.is_ssd,
+                            is_vega=self.model_config.is_vega,
+                            dropout=self.network_config.dropout,
+                            use_text_encoder_1=self.model_config.use_text_encoder_1,
+                            use_text_encoder_2=self.model_config.use_text_encoder_2,
+                            use_bias=is_lorm,
+                            is_lorm=is_lorm,
+                            network_config=self.network_config,
+                            network_type=self.network_config.type,
+                            transformer_only=self.network_config.transformer_only,
+                            is_transformer=self.sd.is_transformer,
+                            base_model=self.sd,
+                            **network_kwargs
+                        )
 
 
                 # todo switch everything to proper mixed precision like this
                 if self.network is not None:
-                    self.network.force_to(self.device_torch, dtype=torch.float32)
+                    if not (is_controlnet or is_controlnet_lllite):
+                        self.network.force_to(self.device_torch, dtype=torch.float32)
+                    else:
+                        # ControlNet networks should be on the same device as UNet
+                        self.network.to(self.device_torch, dtype=dtype)
+
                     # give network to sd so it can use it
                     self.sd.network = self.network
-                    self.network._update_torch_multiplier()
 
-                    self.network.apply_to(
-                        text_encoder,
-                        unet,
-                        self.train_config.train_text_encoder,
-                        self.train_config.train_unet
-                    )
+                    if not (is_controlnet or is_controlnet_lllite):
+                        self.network._update_torch_multiplier()
+
+                        self.network.apply_to(
+                            text_encoder,
+                            unet,
+                            self.train_config.train_text_encoder,
+                            self.train_config.train_unet
+                        )
 
                     # we cannot merge in if quantized
                     if self.model_config.quantize:
@@ -1868,7 +1904,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
                         num_replaced=len(self.network.get_all_modules()),
                     )
 
-                if self.network is not None:
+                if self.network is not None and not (is_controlnet or is_controlnet_lllite):
                     self.network.prepare_grad_etc(text_encoder, unet)
                     flush()
 

@@ -577,6 +577,8 @@ export default function SimpleJob({
                 { value: 'lora', label: 'LoRA' },
                 { value: 'lokr', label: 'LoKr' },
                 { value: 'full', label: 'Full Model Fine-tuning' },
+                { value: 'controlnet', label: 'ControlNet' },
+                { value: 'controlnet_lllite', label: 'ControlNet-LLLite (Lightweight)' },
               ]}
             />
             {jobConfig.config.process[0].network?.type == 'lokr' && (
@@ -622,6 +624,52 @@ export default function SimpleJob({
                     max={1024}
                   />
                 )}
+              </>
+            )}
+            {jobConfig.config.process[0].network?.type == 'controlnet' && (
+              <>
+                <NumberInput
+                  label="Conditioning Channels"
+                  value={jobConfig.config.process[0].network.controlnet_conditioning_channels ?? 3}
+                  onChange={value => setJobConfig(value, 'config.process[0].network.controlnet_conditioning_channels')}
+                  placeholder="eg. 3 (for RGB control images)"
+                  min={1}
+                  max={16}
+                  helpText="Number of channels in control images (3 for RGB, 1 for grayscale)"
+                />
+              </>
+            )}
+            {jobConfig.config.process[0].network?.type == 'controlnet_lllite' && (
+              <>
+                <NumberInput
+                  label="LLLite Depth"
+                  value={jobConfig.config.process[0].network.lllite_depth ?? 2}
+                  onChange={value => setJobConfig(value, 'config.process[0].network.lllite_depth')}
+                  placeholder="eg. 2"
+                  min={1}
+                  max={4}
+                  helpText="Depth of control modules (2-3 recommended)"
+                />
+                <NumberInput
+                  label="Hidden Dimension"
+                  value={jobConfig.config.process[0].network.lllite_hidden_dim ?? 1024}
+                  onChange={value => setJobConfig(value, 'config.process[0].network.lllite_hidden_dim')}
+                  placeholder="eg. 1024"
+                  min={256}
+                  max={4096}
+                  step={128}
+                  helpText="Hidden dimension of control modules"
+                />
+                <NumberInput
+                  label="Conditioning Embedding Dimension"
+                  value={jobConfig.config.process[0].network.lllite_cond_emb_dim ?? 768}
+                  onChange={value => setJobConfig(value, 'config.process[0].network.lllite_cond_emb_dim')}
+                  placeholder="eg. 768"
+                  min={256}
+                  max={2048}
+                  step={64}
+                  helpText="Conditioning embedding dimension"
+                />
               </>
             )}
           </Card>
