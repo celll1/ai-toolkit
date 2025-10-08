@@ -869,6 +869,12 @@ class DatasetConfig:
         self.control_path: Union[str,List[str]] = kwargs.get('control_path', None)  # depth maps, etc
         if self.control_path == '':
             self.control_path = None
+
+        # Paired file settings - for datasets where source/target/instruction are in the same directory
+        self.paired_files: bool = kwargs.get('paired_files', False)
+        self.source_suffix: str = kwargs.get('source_suffix', '_source')  # suffix for control/source images
+        self.target_suffix: str = kwargs.get('target_suffix', '_target')  # suffix for target images
+        self.instruction_suffix: str = kwargs.get('instruction_suffix', '_instruction')  # suffix for instruction/caption files
         # inpaint images should be webp/png images with alpha channel. The alpha 0 (invisible) section will
         # be the part conditioned to be inpainted. The alpha 1 (visible) section will be the part that is ignored
         self.inpaint_path: Union[str,List[str]] = kwargs.get('inpaint_path', None)

@@ -133,7 +133,7 @@ class CaptionMixin:
         img_path_or_tuple = self.file_list[index]
         ext = self.dataset_config.caption_ext
         caption_format = getattr(self.dataset_config, 'caption_format', 'txt')
-        
+
         if isinstance(img_path_or_tuple, tuple):
             img_path = img_path_or_tuple[0] if isinstance(img_path_or_tuple[0], str) else img_path_or_tuple[0].path
             # check if either has a prompt file
@@ -143,14 +143,22 @@ class CaptionMixin:
             img_path = img_path_or_tuple if isinstance(img_path_or_tuple, str) else img_path_or_tuple.path
             # see if prompt file exists
             path_no_ext = os.path.splitext(img_path)[0]
-        
+
+        # Handle paired files mode - replace target suffix with instruction suffix
+        if self.dataset_config.paired_files:
+            file_name_no_ext = os.path.splitext(os.path.basename(img_path))[0]
+            if self.dataset_config.target_suffix in file_name_no_ext:
+                instruction_file_name = file_name_no_ext.replace(self.dataset_config.target_suffix, self.dataset_config.instruction_suffix)
+                dir_path = os.path.dirname(img_path)
+                path_no_ext = os.path.join(dir_path, instruction_file_name)
+
         # Try JSON format first if configured, then fallback to txt
         prompt_path = None
         if caption_format == 'json':
             json_path = path_no_ext + '.json'
             if os.path.exists(json_path):
                 prompt_path = json_path
-        
+
         # Fallback to configured extension if JSON not found
         if prompt_path is None:
             prompt_path = path_no_ext + ext
@@ -1180,16 +1188,32 @@ class ControlFileItemDTOMixin:
         self.control_tensor: Union[torch.Tensor, None] = None
         dataset_config: 'DatasetConfig' = kwargs.get('dataset_config', None)
         self.full_size_control_images = False
-        if dataset_config.control_path is not None:
-            # find the control image path
+        img_path = kwargs.get('path', None)
+
+        # Handle paired files mode
+        if dataset_config.paired_files:
+            # For paired files, replace target suffix with source suffix
+            file_name_no_ext = os.path.splitext(os.path.basename(img_path))[0]
+            # Remove target suffix and add source suffix
+            if dataset_config.target_suffix in file_name_no_ext:
+                source_file_name = file_name_no_ext.replace(dataset_config.target_suffix, dataset_config.source_suffix)
+                dir_path = os.path.dirname(img_path)
+                # Look for source file with any image extension
+                for ext in img_ext_list:
+                    source_path = os.path.join(dir_path, source_file_name + ext)
+                    if os.path.exists(source_path):
+                        self.control_path = source_path
+                        self.has_control_image = True
+                        break
+        elif dataset_config.control_path is not None:
+            # Original behavior: find the control image path in a separate directory
             control_path_list = dataset_config.control_path
             if not isinstance(control_path_list, list):
                 control_path_list = [control_path_list]
             self.full_size_control_images = dataset_config.full_size_control_images
             # we are using control images
-            img_path = kwargs.get('path', None)
             file_name_no_ext = os.path.splitext(os.path.basename(img_path))[0]
-            
+
             found_control_images = []
             for control_path in control_path_list:
                 for ext in img_ext_list:

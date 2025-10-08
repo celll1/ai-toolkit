@@ -32,21 +32,44 @@ Control images are preprocessed versions of your training images. For example:
 - **Pose**: Human pose skeleton maps
 - **Segmentation**: Semantic segmentation maps
 
-You need two sets of images:
+### 2. Dataset Organization
+
+You can organize your dataset in two ways:
+
+#### Option A: Separate Directories (Traditional)
 ```
-/path/to/training/images/    # Original images
+/path/to/training/images/    # Target/output images
+  ├── image001.jpg
+  ├── image001.txt           # Caption file
+  ├── image002.jpg
+  └── image002.txt
+
 /path/to/control/images/     # Corresponding control images
+  ├── image001.jpg           # Same filename as target image
+  └── image002.jpg
 ```
 
 The control images should have the **same filename** as their corresponding training images.
 
-### 2. Prepare Captions
+#### Option B: Paired Files in Same Directory (New)
+All files (source, target, instruction) in a single directory with suffixes:
 
-Each training image should have a corresponding caption file:
 ```
-image001.jpg
-image001.txt  # Caption file
+/path/to/output_data/
+  ├── 20251005_140510_123456_source.png      # Control/conditioning image
+  ├── 20251005_140510_123456_target.png      # Target/output image (for training)
+  ├── 20251005_140510_123456_instruction.txt # Caption/prompt
+  ├── 20251005_140515_789012_source.jpg
+  ├── 20251005_140515_789012_target.jpg
+  ├── 20251005_140515_789012_instruction.txt
+  └── ...
 ```
+
+With this method:
+- Files share a common prefix (timestamp, ID, etc.)
+- `_source` suffix = control/conditioning image
+- `_target` suffix = training target image
+- `_instruction` suffix = caption/prompt file
 
 ## Training ControlNet (Full)
 
@@ -130,6 +153,30 @@ Or use the UI:
 3. Configure your settings
 4. Set the control_path in your dataset
 5. Start training
+
+### Using Paired Files Mode
+
+If your dataset has source/target/instruction files in the same directory (see Option B above), use this configuration (see `config/examples/train_controlnet_paired_files.yaml`):
+
+```yaml
+datasets:
+  - folder_path: "/path/to/output_data"  # Directory with all paired files
+    caption_ext: ".txt"
+    cache_latents_to_disk: true
+    resolution: [1024, 1024]
+
+    # Paired files settings
+    paired_files: true  # Enable paired files mode
+    source_suffix: "_source"      # Suffix for control images
+    target_suffix: "_target"      # Suffix for target images
+    instruction_suffix: "_instruction"  # Suffix for caption files
+```
+
+In the UI:
+1. Select your dataset folder containing all paired files
+2. Check "Paired Files Mode" checkbox
+3. Configure suffixes (defaults: `_source`, `_target`, `_instruction`)
+4. The dataloader will automatically match files by prefix
 
 ## Training ControlNet-LLLite (Lightweight)
 

@@ -1,0 +1,74 @@
+# Example config for training ControlNet with paired files in the same directory
+# Dataset structure:
+#   output_data/
+#   ├── 20251005_140510_123456_source.png    # Control/conditioning image
+#   ├── 20251005_140510_123456_target.png    # Target/output image
+#   ├── 20251005_140510_123456_instruction.txt  # Caption/prompt
+#   ├── 20251005_140515_789012_source.jpg
+#   ├── 20251005_140515_789012_target.jpg
+#   ├── 20251005_140515_789012_instruction.txt
+#   └── ...
+
+job: extension
+config:
+  name: controlnet_paired_files_sdxl
+  process:
+    - type: sd_trainer
+      training_folder: output/controlnet_paired_training
+      device: cuda:0
+
+      # Network configuration for ControlNet
+      network:
+        type: controlnet
+        controlnet_conditioning_channels: 3  # RGB control images
+
+      # Dataset configuration with paired files
+      datasets:
+        - folder_path: "/path/to/output_data"  # Directory containing all paired files
+          caption_ext: ".txt"  # Extension for caption files (will be modified by instruction_suffix)
+          cache_latents_to_disk: true
+          resolution: [1024, 1024]
+
+          # Paired files settings
+          paired_files: true  # Enable paired files mode
+          source_suffix: "_source"      # Suffix for control/source images
+          target_suffix: "_target"      # Suffix for target/output images
+          instruction_suffix: "_instruction"  # Suffix for instruction/caption files
+
+      # Training configuration
+      train:
+        noise_scheduler: flowmatch
+        optimizer: adamw8bit
+        lr: 1e-5
+        batch_size: 1
+        steps: 10000
+        gradient_accumulation_steps: 1
+        train_unet: false
+        train_text_encoder: false
+        gradient_checkpointing: true
+        dtype: bf16
+
+      # Model configuration
+      model:
+        name_or_path: "stabilityai/stable-diffusion-xl-base-1.0"
+        is_xl: true
+        quantize: true
+
+      # Save configuration
+      save:
+        dtype: float16
+        save_every: 500
+        max_step_saves_to_keep: 5
+        save_format: safetensors
+
+      # Sample configuration
+      sample:
+        sampler: flowmatch
+        sample_every: 500
+        width: 1024
+        height: 1024
+        prompts:
+          - "a photo of a person standing"
+          - "a scenic landscape"
+        guidance_scale: 4
+        sample_steps: 20

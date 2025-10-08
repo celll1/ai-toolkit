@@ -449,7 +449,13 @@ class AiToolkitDataset(LatentCachingMixin, ControlCachingMixin, CLIPCachingMixin
                 self.caption_dict = json.load(f)
                 # keys are file paths
                 file_list = list(self.caption_dict.keys())
-                
+
+        # Handle paired files mode - filter to only target files
+        if dataset_config.paired_files:
+            target_suffix = dataset_config.target_suffix
+            file_list = [x for x in file_list if target_suffix in os.path.splitext(os.path.basename(x))[0]]
+            print_acc(f"  -  Paired files mode: filtering for '{target_suffix}' files")
+
         # remove items in the _controls_ folder
         file_list = [x for x in file_list if not os.path.basename(os.path.dirname(x)) == "_controls"]
 

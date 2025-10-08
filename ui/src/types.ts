@@ -110,6 +110,10 @@ export interface DatasetConfig {
   resolution: number[];
   controls: string[];
   control_path: string | null;
+  paired_files?: boolean;
+  source_suffix?: string;
+  target_suffix?: string;
+  instruction_suffix?: string;
   num_frames: number;
   shrink_video_to_frames: boolean;
   do_i2v: boolean;

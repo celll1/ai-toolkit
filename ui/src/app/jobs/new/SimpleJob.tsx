@@ -1179,16 +1179,52 @@ export default function SimpleJob({
                         </div>
                       )}
                       {modelArch?.additionalSections?.includes('datasets.control_path') && (
-                        <SelectInput
-                          label="Control Dataset"
-                          docKey="datasets.control_path"
-                          value={dataset.control_path ?? ''}
-                          className="pt-2"
-                          onChange={value =>
-                            setJobConfig(value == '' ? null : value, `config.process[0].datasets[${i}].control_path`)
-                          }
-                          options={[{ value: '', label: <>&nbsp;</> }, ...datasetOptions]}
-                        />
+                        <>
+                          <SelectInput
+                            label="Control Dataset"
+                            docKey="datasets.control_path"
+                            value={dataset.control_path ?? ''}
+                            className="pt-2"
+                            onChange={value =>
+                              setJobConfig(value == '' ? null : value, `config.process[0].datasets[${i}].control_path`)
+                            }
+                            options={[{ value: '', label: <>&nbsp;</> }, ...datasetOptions]}
+                          />
+                          <Checkbox
+                            label="Paired Files Mode (source/target/instruction files in same directory)"
+                            checked={dataset.paired_files ?? false}
+                            className="pt-2"
+                            onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].paired_files`)}
+                          />
+                          {dataset.paired_files && (
+                            <>
+                              <TextInput
+                                label="Source Suffix (for control images, e.g. '_source')"
+                                value={dataset.source_suffix ?? '_source'}
+                                className="pt-2"
+                                onChange={value =>
+                                  setJobConfig(value, `config.process[0].datasets[${i}].source_suffix`)
+                                }
+                              />
+                              <TextInput
+                                label="Target Suffix (for training images, e.g. '_target')"
+                                value={dataset.target_suffix ?? '_target'}
+                                className="pt-2"
+                                onChange={value =>
+                                  setJobConfig(value, `config.process[0].datasets[${i}].target_suffix`)
+                                }
+                              />
+                              <TextInput
+                                label="Instruction Suffix (for captions, e.g. '_instruction')"
+                                value={dataset.instruction_suffix ?? '_instruction'}
+                                className="pt-2"
+                                onChange={value =>
+                                  setJobConfig(value, `config.process[0].datasets[${i}].instruction_suffix`)
+                                }
+                              />
+                            </>
+                          )}
+                        </>
                       )}
                       <NumberInput
                         label="LoRA Weight"
