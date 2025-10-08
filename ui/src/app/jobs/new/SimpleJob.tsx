@@ -679,14 +679,13 @@ export default function SimpleJob({
               ]}
             />
             <SelectInput
-              label="Save Format"
+              label="Save Format (SafeTensors: Single file / Diffusers: Multiple files)"
               value={jobConfig.config.process[0].save.save_format}
               onChange={value => setJobConfig(value, 'config.process[0].save.save_format')}
               options={[
                 { value: 'safetensors', label: 'SafeTensors (Single File)' },
                 { value: 'diffusers', label: 'Diffusers (Multiple Files)' },
               ]}
-              helpText="SafeTensors: Single .safetensors file. Diffusers: Multiple files and folders structure."
             />
             <NumberInput
               label="Save Every"
@@ -705,11 +704,10 @@ export default function SimpleJob({
               required
             />
             <Checkbox
-              label="Save on Interrupt"
+              label="Save on Interrupt (Save when Ctrl+C or UI stop)"
               className="pt-2"
               checked={jobConfig.config.process[0].save.save_on_interrupt || false}
               onChange={value => setJobConfig(value, 'config.process[0].save.save_on_interrupt')}
-              helpText="Save model when training is interrupted (Ctrl+C or UI stop)"
             />
           </Card>
         </div>
@@ -882,19 +880,17 @@ export default function SimpleJob({
                     }}
                   />
                   <Checkbox
-                    label="Train Text Encoder"
+                    label="Train Text Encoder (Apply LoRA to text encoder)"
                     checked={jobConfig.config.process[0].train.train_text_encoder || false}
                     docKey={'train.train_text_encoder'}
                     onChange={value => setJobConfig(value, 'config.process[0].train.train_text_encoder')}
-                    helpText="Apply LoRA training to the text encoder"
                   />
                   {modelArch?.name === 'sdxl' && (
                     <Checkbox
-                      label="Enable Long Prompts (>75 tokens)"
+                      label="Enable Long Prompts (>75 tokens, splits into chunks)"
                       checked={jobConfig.config.process[0].train.enable_long_prompts || false}
                       docKey={'train.enable_long_prompts'}
                       onChange={value => setJobConfig(value, 'config.process[0].train.enable_long_prompts')}
-                      helpText="Allow prompts longer than 75 tokens by splitting into chunks (SDXL only)"
                     />
                   )}
                   {jobConfig.config.process[0].train.train_text_encoder && (
@@ -1365,7 +1361,6 @@ export default function SimpleJob({
                           fetchAvailableTagGroups(value || 'taggroup');
                         }}
                         placeholder="taggroup"
-                        helpText="Directory containing tag group JSON files"
                       />
                       
                       <FormGroup label="Tag Dropout" className="pt-4">
@@ -1377,8 +1372,7 @@ export default function SimpleJob({
                           placeholder="eg. 0.1"
                           min={0}
                           max={1}
-                          step={0.05}
-                          helpText="Probability of dropping individual tags (0-1)"
+                          
                         />
                         {dataset.tag_dropout_rate > 0 && (
                           <>
@@ -1389,21 +1383,18 @@ export default function SimpleJob({
                               onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].tag_dropout_keep_first_n`)}
                               placeholder="eg. 3"
                               min={0}
-                              helpText="Number of first tags to always keep"
                             />
                             <Checkbox
                               label="Randomize Per Epoch"
                               className="pt-2"
                               checked={dataset.tag_dropout_per_epoch || false}
                               onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].tag_dropout_per_epoch`)}
-                              helpText="Apply different random dropout each epoch"
                             />
                             <Checkbox
                               label="Exclude Person Count Tags"
                               className="pt-2"
                               checked={dataset.tag_dropout_exclude_person_count || false}
                               onChange={value => setJobConfig(value, `config.process[0].datasets[${i}].tag_dropout_exclude_person_count`)}
-                              helpText="Exclude tags like '1girl', '2boys' from dropout"
                             />
                             
                             {/* Category-specific dropout rates */}
@@ -1432,7 +1423,7 @@ export default function SimpleJob({
                                     placeholder="default"
                                     min={0}
                                     max={1}
-                                    step={0.01}
+                                    
                                   />
                                 )) : (
                                   <p className="text-gray-400 italic">No tag group files found in directory</p>

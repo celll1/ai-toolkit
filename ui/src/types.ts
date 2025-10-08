@@ -76,6 +76,7 @@ export interface SaveConfig {
   max_step_saves_to_keep: number;
   save_format: string;
   push_to_hub: boolean;
+  save_on_interrupt?: boolean;
 }
 
 export interface JsonFilter {
@@ -101,6 +102,7 @@ export interface DatasetConfig {
   exclude_person_count_tags?: boolean;
   shuffle_groups_together?: boolean;
   tag_normalization_format?: 'underscore' | 'space' | 'space_escaped';
+  tag_group_dir?: string;
   is_reg: boolean;
   network_weight: number;
   cache_latents_to_disk?: boolean;
@@ -115,6 +117,11 @@ export interface DatasetConfig {
   caption_format?: 'txt' | 'json';  // Caption format for this dataset
   json_attribute?: string;  // JSON attribute to extract for captions
   json_filters?: JsonFilter[];  // JSON field filters for data sampling
+  tag_dropout_rate?: number;
+  tag_dropout_keep_first_n?: number;
+  tag_dropout_per_epoch?: boolean;
+  tag_dropout_exclude_person_count?: boolean;
+  tag_dropout_category_rates?: Record<string, number>;
 }
 
 export interface EMAConfig {
@@ -152,6 +159,8 @@ export interface TrainConfig {
   diff_output_preservation_class: string;
   switch_boundary_every: number;
   enable_long_prompts?: boolean;
+  multi_noise_timestep?: boolean;
+  multi_noise_batch_size?: number;
 }
 
 export interface QuantizeKwargsConfig {
@@ -168,6 +177,7 @@ export interface ModelConfig {
   arch: string;
   low_vram: boolean;
   model_kwargs: { [key: string]: any };
+  attention_type?: string;
 }
 
 export interface SampleItem {
