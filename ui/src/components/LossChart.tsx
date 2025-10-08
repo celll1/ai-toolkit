@@ -21,12 +21,19 @@ export default function LossChart({ data, smoothData, isLoading = false }: LossC
     smoothLoss: smoothData?.[index]?.value
   }));
   
-  // Format Y-axis tick labels to scientific notation
+  // Format Y-axis tick labels - use decimal notation for better readability
   const formatYAxis = (value: number) => {
     if (value === 0) return '0';
-    const exponent = Math.floor(Math.log10(Math.abs(value)));
-    const mantissa = value / Math.pow(10, exponent);
-    return `${mantissa.toFixed(2)}e${exponent >= 0 ? '+' : ''}${exponent}`;
+    if (Math.abs(value) >= 1) {
+      return value.toFixed(2);
+    } else if (Math.abs(value) >= 0.01) {
+      return value.toFixed(3);
+    } else if (Math.abs(value) >= 0.001) {
+      return value.toFixed(4);
+    } else {
+      // For very small values, use scientific notation
+      return value.toExponential(1);
+    }
   };
 
   return (
@@ -41,65 +48,61 @@ export default function LossChart({ data, smoothData, isLoading = false }: LossC
         )}
       </div>
       
-      <div className="h-32">
+      <div className="h-64">
         {chartData.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
+            <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis 
-                dataKey="step" 
+              <XAxis
+                dataKey="step"
                 stroke="#9CA3AF"
-                fontSize={12}
+                fontSize={11}
                 tickLine={false}
                 axisLine={false}
               />
-              <YAxis 
+              <YAxis
                 stroke="#9CA3AF"
-                fontSize={12}
+                fontSize={11}
                 tickLine={false}
                 axisLine={false}
-                domain={['dataMin', 'dataMax']}
+                domain={['auto', 'auto']}
                 tickFormatter={formatYAxis}
+                width={60}
               />
-              <Tooltip 
+              <Tooltip
                 contentStyle={{
                   backgroundColor: '#1F2937',
                   border: '1px solid #374151',
                   borderRadius: '8px',
-                  color: '#F3F4F6'
+                  color: '#F3F4F6',
+                  fontSize: '12px'
                 }}
                 formatter={(value: number, name: string) => {
-                  const formatted = value.toExponential(2);
-                  const label = name === 'loss' ? 'Loss' : 'Smooth Loss';
+                  const formatted = typeof value === 'number' ? value.toFixed(4) : value;
+                  const label = name === 'loss' ? 'Loss' : 'Smooth';
                   return [formatted, label];
                 }}
                 labelFormatter={(step: number) => `Step: ${step}`}
               />
-              <Legend 
-                wrapperStyle={{
-                  fontSize: '12px',
-                  color: '#9CA3AF'
-                }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="loss" 
-                stroke="#EF4444" 
+              <Line
+                type="monotone"
+                dataKey="loss"
+                stroke="#EF4444"
                 strokeWidth={1}
                 dot={false}
                 activeDot={{ r: 3, fill: '#EF4444' }}
                 opacity={0.6}
-                name="Loss"
+                isAnimationActive={false}
               />
               {smoothData && smoothData.length > 0 && (
-                <Line 
-                  type="monotone" 
-                  dataKey="smoothLoss" 
-                  stroke="#FCA5A5" 
+                <Line
+                  type="monotone"
+                  dataKey="smoothLoss"
+                  stroke="#FCA5A5"
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 3, fill: '#FCA5A5' }}
-                  name="Smooth Loss"
+                  isAnimationActive={false}
                 />
               )}
             </LineChart>
@@ -110,15 +113,6 @@ export default function LossChart({ data, smoothData, isLoading = false }: LossC
           </div>
         )}
       </div>
-      
-      {chartData.length > 0 && (
-        <div className="mt-2 text-xs text-gray-400 space-y-1">
-          <div>Latest Loss: {chartData[chartData.length - 1]?.loss.toExponential(2) || 'N/A'}</div>
-          {smoothData && smoothData.length > 0 && (
-            <div>Smooth Loss: {chartData[chartData.length - 1]?.smoothLoss?.toExponential(2) || 'N/A'}</div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

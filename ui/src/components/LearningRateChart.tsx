@@ -18,12 +18,17 @@ export default function LearningRateChart({ data, isLoading = false }: LearningR
     lr: point.value
   }));
   
-  // Format Y-axis tick labels to scientific notation
+  // Format Y-axis tick labels - use decimal notation for better readability
   const formatYAxis = (value: number) => {
     if (value === 0) return '0';
-    const exponent = Math.floor(Math.log10(Math.abs(value)));
-    const mantissa = value / Math.pow(10, exponent);
-    return `${mantissa.toFixed(2)}e${exponent >= 0 ? '+' : ''}${exponent}`;
+    if (Math.abs(value) >= 0.1) {
+      return value.toFixed(4);
+    } else if (Math.abs(value) >= 0.00001) {
+      return value.toFixed(6);
+    } else {
+      // For very small values, use scientific notation
+      return value.toExponential(1);
+    }
   };
 
   return (
@@ -37,44 +42,47 @@ export default function LearningRateChart({ data, isLoading = false }: LearningR
           </div>
         )}
       </div>
-      
-      <div className="h-32">
+
+      <div className="h-64">
         {chartData.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
+            <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis 
-                dataKey="step" 
+              <XAxis
+                dataKey="step"
                 stroke="#9CA3AF"
-                fontSize={12}
+                fontSize={11}
                 tickLine={false}
                 axisLine={false}
               />
-              <YAxis 
+              <YAxis
                 stroke="#9CA3AF"
-                fontSize={12}
+                fontSize={11}
                 tickLine={false}
                 axisLine={false}
-                domain={['dataMin', 'dataMax']}
+                domain={['auto', 'auto']}
                 tickFormatter={formatYAxis}
+                width={70}
               />
-              <Tooltip 
+              <Tooltip
                 contentStyle={{
                   backgroundColor: '#1F2937',
                   border: '1px solid #374151',
                   borderRadius: '8px',
-                  color: '#F3F4F6'
+                  color: '#F3F4F6',
+                  fontSize: '12px'
                 }}
-                formatter={(value: number) => [value.toExponential(2), 'Learning Rate']}
+                formatter={(value: number) => [typeof value === 'number' ? value.toFixed(6) : value, 'LR']}
                 labelFormatter={(step: number) => `Step: ${step}`}
               />
-              <Line 
-                type="monotone" 
-                dataKey="lr" 
-                stroke="#3B82F6" 
+              <Line
+                type="monotone"
+                dataKey="lr"
+                stroke="#3B82F6"
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 3, fill: '#3B82F6' }}
+                isAnimationActive={false}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -84,12 +92,6 @@ export default function LearningRateChart({ data, isLoading = false }: LearningR
           </div>
         )}
       </div>
-      
-      {chartData.length > 0 && (
-        <div className="mt-2 text-xs text-gray-400">
-          Latest: {chartData[chartData.length - 1]?.lr.toExponential(2) || 'N/A'}
-        </div>
-      )}
     </div>
   );
 }

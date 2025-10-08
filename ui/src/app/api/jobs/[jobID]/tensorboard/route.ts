@@ -330,6 +330,11 @@ export async function GET(
   { params }: { params: { jobID: string } }
 ) {
   try {
+    // Get 'since' query parameter for incremental updates
+    const { searchParams } = new URL(request.url);
+    const sinceStep = searchParams.get('since');
+    const minStep = sinceStep ? parseInt(sinceStep, 10) : -1;
+
     const job = await prisma.job.findUnique({
       where: { id: params.jobID }
     });
@@ -484,6 +489,15 @@ export async function GET(
       });
     } catch (error) {
       console.error('Error reading tensorboard directory:', error);
+    }
+
+    // Filter data to only return events after minStep
+    if (minStep >= 0) {
+      data = {
+        loss: data.loss.filter(event => event.step > minStep),
+        learning_rate: data.learning_rate.filter(event => event.step > minStep),
+        smooth_loss: data.smooth_loss?.filter(event => event.step > minStep)
+      };
     }
 
     return NextResponse.json(data);
