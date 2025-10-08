@@ -297,7 +297,8 @@ export default function SimpleJob({
           source_suffix: randomDataset.source_suffix,
           target_suffix: randomDataset.target_suffix,
           instruction_suffix: randomDataset.instruction_suffix,
-          control_path: randomDataset.control_path
+          control_path: randomDataset.control_path,
+          caption_ext: randomDataset.caption_ext
         };
       }
 

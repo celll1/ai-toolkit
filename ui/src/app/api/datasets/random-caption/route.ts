@@ -20,6 +20,7 @@ function getRandomCaption(
     target_suffix?: string;
     instruction_suffix?: string;
     control_path?: string;
+    caption_ext?: string;
   }
 ): RandomCaptionResult | null {
   try {
@@ -70,7 +71,12 @@ function getRandomCaption(
     }
 
     console.log(`[Random Caption] Selected image: ${randomImagePath}`);
-    console.log(`[Random Caption] Looking for captions with base name: ${imageBaseName}`);
+    console.log(`[Random Caption] Image base name: ${imageBaseName}`);
+    console.log(`[Random Caption] Paired files mode: ${datasetConfig?.paired_files}`);
+    if (datasetConfig?.paired_files) {
+      console.log(`[Random Caption] Target suffix: ${datasetConfig.target_suffix}`);
+      console.log(`[Random Caption] Instruction suffix: ${datasetConfig.instruction_suffix}`);
+    }
 
     // Find control image
     let controlImagePath: string | undefined;
@@ -104,10 +110,26 @@ function getRandomCaption(
     // For paired files, replace target suffix with instruction suffix
     if (datasetConfig?.paired_files && datasetConfig.instruction_suffix && datasetConfig.target_suffix) {
       captionBaseName = imageBaseName.replace(datasetConfig.target_suffix, datasetConfig.instruction_suffix);
+      console.log(`[Random Caption] Caption base name (after suffix replacement): ${captionBaseName}`);
+    } else {
+      console.log(`[Random Caption] Caption base name: ${captionBaseName}`);
     }
 
-    for (const captionExt of CAPTION_EXTENSIONS) {
+    // Determine which caption extensions to try
+    let captionExtensions = CAPTION_EXTENSIONS;
+    if (datasetConfig?.caption_ext) {
+      // Ensure extension starts with a dot
+      const ext = datasetConfig.caption_ext.startsWith('.')
+        ? datasetConfig.caption_ext
+        : '.' + datasetConfig.caption_ext;
+      captionExtensions = [ext, ...CAPTION_EXTENSIONS]; // Try configured first, then fall back
+    }
+
+    console.log(`[Random Caption] Looking for caption with extensions: ${captionExtensions.join(', ')}`);
+
+    for (const captionExt of captionExtensions) {
       const captionPath = path.join(imageDir, captionBaseName + captionExt);
+      console.log(`[Random Caption] Trying caption path: ${captionPath}`);
       
       if (fs.existsSync(captionPath)) {
         try {
@@ -145,9 +167,9 @@ function getRandomCaption(
     }
     
     // If no caption file found, return the image filename without extension as fallback
-    console.log(`[Random Caption] No caption file found, using filename as fallback: ${imageBaseName}`);
+    console.log(`[Random Caption] No caption file found, using filename as fallback: ${captionBaseName}`);
     return {
-      caption: imageBaseName.replace(/[_-]/g, ' '),
+      caption: captionBaseName.replace(/[_-]/g, ' '),
       imagePath: randomImagePath,
       controlImagePath
     };
