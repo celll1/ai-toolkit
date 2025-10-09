@@ -168,6 +168,14 @@ class ControlNetNetwork(nn.Module):
         if hasattr(self.controlnet, 'enable_gradient_checkpointing'):
             self.controlnet.enable_gradient_checkpointing()
 
+    def __enter__(self):
+        """Context manager entry"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit"""
+        return False
+
 
 class ControlNetLLLiteModule(nn.Module):
     """
@@ -442,6 +450,14 @@ class ControlNetLLLiteNetwork(nn.Module):
         for module in self.lllite_modules.values():
             if hasattr(module.conditioning_encoder, 'gradient_checkpointing'):
                 module.conditioning_encoder.gradient_checkpointing = True
+
+    def __enter__(self):
+        """Context manager entry"""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit"""
+        return False
 
     def __del__(self):
         """Cleanup: remove hooks when object is deleted"""
