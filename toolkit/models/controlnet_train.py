@@ -334,23 +334,26 @@ class ControlNetLLLiteNetwork(nn.Module):
                 # Store original forward
                 self._original_forwards[module_name] = module.forward
 
-                # Create wrapped forward
-                def create_wrapper(orig_forward, lllite_module):
+                # Create wrapped forward with proper closure
+                def create_wrapper(orig_forward, lllite_module, network_ref):
                     def wrapper(hidden_states, *args, **kwargs):
                         # Call original forward
                         output = orig_forward(hidden_states, *args, **kwargs)
 
                         # Apply LLLite if active and we have conditioning image
-                        if self.is_active and self.cond_image is not None:
-                            if isinstance(output, tuple):
-                                output = (lllite_module(output[0], self.cond_image, self.multiplier),) + output[1:]
-                            else:
-                                output = lllite_module(output, self.cond_image, self.multiplier)
+                        if network_ref.is_active and network_ref.cond_image is not None:
+                            # Ensure gradients are enabled for LLLite computation
+                            with torch.set_grad_enabled(True):
+                                if isinstance(output, tuple):
+                                    modified_output = lllite_module(output[0], network_ref.cond_image, network_ref.multiplier)
+                                    output = (modified_output,) + output[1:]
+                                else:
+                                    output = lllite_module(output, network_ref.cond_image, network_ref.multiplier)
 
                         return output
                     return wrapper
 
-                module.forward = create_wrapper(module.forward, self.lllite_modules[module_name])
+                module.forward = create_wrapper(module.forward, self.lllite_modules[module_name], self)
 
     def _remove_hooks(self):
         """Remove hooks and restore original forward methods"""
