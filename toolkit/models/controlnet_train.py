@@ -374,11 +374,6 @@ class ControlNetLLLiteNetwork(nn.Module):
                             # Call original forward
                             output = orig_forward(hidden_states, *args, **kwargs)
 
-                            # Debug: check state on first call
-                            if call_counter[0] == 0:
-                                print(f"[DEBUG] Hook called for {hook_name}: is_active={network_ref.is_active}, has_cond_image={network_ref.cond_image is not None}")
-                                call_counter[0] = -1  # Only print once
-
                             # Apply LLLite if active and we have conditioning image
                             if network_ref.is_active and network_ref.cond_image is not None:
                                 # Ensure gradients are enabled for LLLite computation
@@ -387,25 +382,9 @@ class ControlNetLLLiteNetwork(nn.Module):
                                         # BasicTransformerBlock returns (hidden_states,) or hidden_states
                                         orig_tensor = output[0]
                                         modified_output = lllite_module(orig_tensor, network_ref.cond_image, network_ref.multiplier)
-
-                                        # Debug first call
-                                        if call_counter[0] == 0:
-                                            print(f"[DEBUG] First LLLite call:")
-                                            print(f"  Input requires_grad: {orig_tensor.requires_grad}, has grad_fn: {orig_tensor.grad_fn is not None}")
-                                            print(f"  Output requires_grad: {modified_output.requires_grad}, has grad_fn: {modified_output.grad_fn is not None}")
-                                            call_counter[0] += 1
-
                                         output = (modified_output,) + output[1:]
                                     else:
                                         modified_output = lllite_module(output, network_ref.cond_image, network_ref.multiplier)
-
-                                        # Debug first call
-                                        if call_counter[0] == 0:
-                                            print(f"[DEBUG] First LLLite call (no tuple):")
-                                            print(f"  Input requires_grad: {output.requires_grad}, has grad_fn: {output.grad_fn is not None}")
-                                            print(f"  Output requires_grad: {modified_output.requires_grad}, has grad_fn: {modified_output.grad_fn is not None}")
-                                            call_counter[0] += 1
-
                                         output = modified_output
 
                             return output
@@ -429,7 +408,7 @@ class ControlNetLLLiteNetwork(nn.Module):
     def set_cond_image(self, cond_image: torch.Tensor):
         """Set the conditioning image for the next forward pass"""
         self.cond_image = cond_image
-        print(f"[ControlNet-LLLite] set_cond_image called: shape={cond_image.shape if cond_image is not None else None}, is_active={self.is_active}")
+        # print(f"[ControlNet-LLLite] set_cond_image called: shape={cond_image.shape if cond_image is not None else None}, is_active={self.is_active}")
 
     def to(self, *args, **kwargs):
         super().to(*args, **kwargs)

@@ -1212,12 +1212,12 @@ class ControlFileItemDTOMixin:
                     if os.path.exists(source_path):
                         self.control_path = source_path
                         self.has_control_image = True
-                        print(f"[DEBUG] Found control image: {source_path}")
+                        # print(f"[DEBUG] Found control image: {source_path}")
                         break
-                if not self.has_control_image:
-                    print(f"[DEBUG] Control image NOT found for {img_path}, searched: {source_file_name}")
-            else:
-                print(f"[DEBUG] Target suffix '{dataset_config.target_suffix}' not in filename: {file_name_no_ext}")
+                # if not self.has_control_image:
+                #     print(f"[DEBUG] Control image NOT found for {img_path}, searched: {source_file_name}")
+            # else:
+            #     print(f"[DEBUG] Target suffix '{dataset_config.target_suffix}' not in filename: {file_name_no_ext}")
         elif dataset_config.control_path is not None:
             # Original behavior: find the control image path in a separate directory
             control_path_list = dataset_config.control_path
@@ -1242,11 +1242,12 @@ class ControlFileItemDTOMixin:
                 self.control_path = self.control_path[0]
 
     def load_control_image(self: 'FileItemDTO'):
-        if not hasattr(ControlFileItemDTOMixin, '_load_debug_printed'):
-            ControlFileItemDTOMixin._load_debug_printed = True
-            print(f"[DEBUG] load_control_image called for: {self.path}")
-            print(f"[DEBUG] control_path: {self.control_path}")
-            print(f"[DEBUG] has_control_image: {self.has_control_image}")
+        # if not hasattr(ControlFileItemDTOMixin, '_load_debug_printed'):
+        #     ControlFileItemDTOMixin._load_debug_printed = True
+        #     print(f"[DEBUG] load_control_image called for: {self.path}")
+        #     print(f"[DEBUG] control_path: {self.control_path}")
+        #     print(f"[DEBUG] has_control_image: {self.has_control_image}")
+        pass
 
         control_tensors = []
         control_path_list = self.control_path
@@ -1313,9 +1314,9 @@ class ControlFileItemDTOMixin:
         else:
             self.control_tensor = torch.stack(control_tensors, dim=0)
 
-        if not hasattr(ControlFileItemDTOMixin, '_tensor_debug_printed'):
-            ControlFileItemDTOMixin._tensor_debug_printed = True
-            print(f"[DEBUG] control_tensor set: shape={self.control_tensor.shape if self.control_tensor is not None else None}")
+        # if not hasattr(ControlFileItemDTOMixin, '_tensor_debug_printed'):
+        #     ControlFileItemDTOMixin._tensor_debug_printed = True
+        #     print(f"[DEBUG] control_tensor set: shape={self.control_tensor.shape if self.control_tensor is not None else None}")
 
     def cleanup_control(self: 'FileItemDTO'):
         self.control_tensor = None
