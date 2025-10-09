@@ -1904,28 +1904,40 @@ class BaseSDTrainProcess(BaseTrainProcess):
                         num_replaced=len(self.network.get_all_modules()),
                     )
 
-                if self.network is not None and not (is_controlnet or is_controlnet_lllite):
-                    self.network.prepare_grad_etc(text_encoder, unet)
-                    flush()
+                if self.network is not None:
+                    if not (is_controlnet or is_controlnet_lllite):
+                        self.network.prepare_grad_etc(text_encoder, unet)
+                        flush()
 
-                    # LyCORIS doesnt have default_lr
-                    config = {
-                        'text_encoder_lr': self.train_config.lr,
-                        'unet_lr': self.train_config.lr,
-                    }
-                    sig = inspect.signature(self.network.prepare_optimizer_params)
-                    if 'default_lr' in sig.parameters:
-                        config['default_lr'] = self.train_config.lr
-                    if 'learning_rate' in sig.parameters:
-                        config['learning_rate'] = self.train_config.lr
-                    params_net = self.network.prepare_optimizer_params(
-                        **config
-                    )
+                        # LyCORIS doesnt have default_lr
+                        config = {
+                            'text_encoder_lr': self.train_config.lr,
+                            'unet_lr': self.train_config.lr,
+                        }
+                        sig = inspect.signature(self.network.prepare_optimizer_params)
+                        if 'default_lr' in sig.parameters:
+                            config['default_lr'] = self.train_config.lr
+                        if 'learning_rate' in sig.parameters:
+                            config['learning_rate'] = self.train_config.lr
+                        params_net = self.network.prepare_optimizer_params(
+                            **config
+                        )
 
-                    params += params_net
+                        params += params_net
 
-                    if self.train_config.gradient_checkpointing:
-                        self.network.enable_gradient_checkpointing()
+                        if self.train_config.gradient_checkpointing:
+                            self.network.enable_gradient_checkpointing()
+                    else:
+                        # ControlNet and ControlNet-LLLite have simpler parameter setup
+                        print_acc("Preparing ControlNet/LLLite optimizer parameters...")
+                        params_net = self.network.prepare_optimizer_params(
+                            learning_rate=self.train_config.lr
+                        )
+                        params += params_net
+                        print_acc(f"Added {len(params_net)} parameter groups from ControlNet/LLLite")
+
+                        if self.train_config.gradient_checkpointing:
+                            self.network.enable_gradient_checkpointing()
 
                 lora_name = self.name
                 # need to adapt name so they are not mixed up
