@@ -118,12 +118,17 @@ class ControlNetNetwork(nn.Module):
         if not self.is_active:
             return None
 
+        # Handle multiplier being either a scalar or a list
+        multiplier_value = self.multiplier
+        if isinstance(self.multiplier, (list, tuple)):
+            multiplier_value = self.multiplier[0] if len(self.multiplier) > 0 else 1.0
+
         down_block_res_samples, mid_block_res_sample = self.controlnet(
             sample=sample,
             timestep=timestep,
             encoder_hidden_states=encoder_hidden_states,
             controlnet_cond=controlnet_cond,
-            conditioning_scale=conditioning_scale * self.multiplier,
+            conditioning_scale=conditioning_scale * multiplier_value,
             return_dict=False,
         )
 
