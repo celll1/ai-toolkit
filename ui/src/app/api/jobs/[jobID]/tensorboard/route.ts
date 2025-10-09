@@ -24,10 +24,10 @@ function parseTensorboardLog(logPath: string): TensorboardData {
   };
 
   try {
-    console.log('Parsing tensorboard log from:', logPath);
-    
+    // console.log('Parsing tensorboard log from:', logPath);
+
     if (!existsSync(logPath)) {
-      console.log('Log path does not exist:', logPath);
+      // console.log('Log path does not exist:', logPath);
       return data;
     }
 
@@ -41,19 +41,19 @@ function parseTensorboardLog(logPath: string): TensorboardData {
       }))
       .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
 
-    console.log('Found event files:', files.map(f => f.name));
+    // console.log('Found event files:', files.map(f => f.name));
 
     if (files.length === 0) {
-      console.log('No event files found');
+      // console.log('No event files found');
       return data;
     }
 
     const eventFile = files[0].path;
-    console.log('Using event file:', eventFile);
-    
+    // console.log('Using event file:', eventFile);
+
     // Read the tensorboard event file
     const buffer = readFileSync(eventFile);
-    console.log('Event file size:', buffer.length, 'bytes');
+    // console.log('Event file size:', buffer.length, 'bytes');
     
     // TFRecord format parsing with improved protobuf handling
     // TFRecord: [length (8 bytes LE)][masked_crc (4 bytes)][data][data_crc (4 bytes)]
@@ -165,7 +165,7 @@ function parseTensorboardLog(logPath: string): TensorboardData {
       }
     }
     
-    console.log(`Processed ${recordCount} records`);
+    // console.log(`Processed ${recordCount} records`);
     
     // Remove duplicates and sort by step
     data.loss = Array.from(new Map(data.loss.map(item => [item.step, item])).values())
@@ -173,7 +173,7 @@ function parseTensorboardLog(logPath: string): TensorboardData {
     data.learning_rate = Array.from(new Map(data.learning_rate.map(item => [item.step, item])).values())
       .sort((a, b) => a.step - b.step);
     
-    console.log(`Final data: loss=${data.loss.length} points, lr=${data.learning_rate.length} points`);
+    // console.log(`Final data: loss=${data.loss.length} points, lr=${data.learning_rate.length} points`);
     
     // Keep only the last 1000 points for performance
     if (data.loss.length > 1000) {
@@ -311,16 +311,16 @@ function parseValue(valueData: Uint8Array, step: number | null, wallTime: number
         value: scalarValue,
         wall_time: wallTime || Date.now() / 1000
       });
-      console.log(`Found loss: tag="${tagName}", step=${step}, value=${scalarValue}`);
+      // console.log(`Found loss: tag="${tagName}", step=${step}, value=${scalarValue}`);
     } else if (tagName.toLowerCase().includes('lr') || tagName.toLowerCase().includes('learning_rate')) {
       data.learning_rate.push({
         step,
         value: scalarValue,
         wall_time: wallTime || Date.now() / 1000
       });
-      console.log(`Found LR: tag="${tagName}", step=${step}, value=${scalarValue}`);
+      // console.log(`Found LR: tag="${tagName}", step=${step}, value=${scalarValue}`);
     } else {
-      console.log(`Found other metric: tag="${tagName}", step=${step}, value=${scalarValue}`);
+      // console.log(`Found other metric: tag="${tagName}", step=${step}, value=${scalarValue}`);
     }
   }
 }
@@ -350,7 +350,7 @@ export async function GET(
     let logDir = processConfig?.log_dir;
     
     if (!logDir) {
-      console.log('No log_dir specified in job configuration');
+      // console.log('No log_dir specified in job configuration');
       return NextResponse.json({ 
         loss: [], 
         learning_rate: [] 
@@ -368,13 +368,13 @@ export async function GET(
     for (const candidate of possibleLogDirs) {
       if (existsSync(candidate)) {
         actualLogDir = candidate;
-        console.log(`Found tensorboard directory: ${candidate}`);
+        // console.log(`Found tensorboard directory: ${candidate}`);
         break;
       }
     }
 
     if (!actualLogDir) {
-      console.log('Tensorboard log directory does not exist. Tried:', possibleLogDirs);
+      // console.log('Tensorboard log directory does not exist. Tried:', possibleLogDirs);
       return NextResponse.json({ 
         loss: [], 
         learning_rate: [] 
@@ -385,12 +385,12 @@ export async function GET(
 
     let data: TensorboardData = { loss: [], learning_rate: [] };
 
-    console.log('Using tensorboard log directory:', logDir);
+    // console.log('Using tensorboard log directory:', logDir);
 
     try {
       // Get the job name from configuration
       const jobName = processConfig?.name || job.name;
-      console.log('Looking for tensorboard directories matching job name:', jobName);
+      // console.log('Looking for tensorboard directories matching job name:', jobName);
       
       // Find directories that match the job name pattern (job_name + timestamp)
       const allDirs = readdirSync(logDir)
@@ -405,10 +405,10 @@ export async function GET(
             const matchesJobName = dir.name.startsWith(jobName);
             // Prefer directories with timestamps (job_name_YYYYMMDD-HHMMSS format)
             const hasTimestamp = dir.name.includes('_20') && dir.name.match(/_\d{8}-\d{6}$/);
-            console.log(`Directory ${dir.name}: isDirectory=${isDirectory}, matchesJobName=${matchesJobName}, hasTimestamp=${hasTimestamp}`);
+            // console.log(`Directory ${dir.name}: isDirectory=${isDirectory}, matchesJobName=${matchesJobName}, hasTimestamp=${hasTimestamp}`);
             return isDirectory && matchesJobName;
           } catch (error) {
-            console.log(`Error checking directory ${dir.name}:`, error);
+            // console.log(`Error checking directory ${dir.name}:`, error);
             return false;
           }
         })
@@ -424,10 +424,10 @@ export async function GET(
           return b.mtime.getTime() - a.mtime.getTime();
         });
 
-      console.log('Found matching tensorboard directories (sorted):', allDirs.map(d => d.name));
+      // console.log('Found matching tensorboard directories (sorted):', allDirs.map(d => d.name));
 
       if (allDirs.length === 0) {
-        console.log(`No directories found matching job name "${jobName}" in ${logDir}`);
+        // console.log(`No directories found matching job name "${jobName}" in ${logDir}`);
         // Also list all directories for debugging
         const allDirsDebug = readdirSync(logDir).filter(dir => {
           try {
@@ -436,7 +436,7 @@ export async function GET(
             return false;
           }
         });
-        console.log('All available directories:', allDirsDebug);
+        // console.log('All available directories:', allDirsDebug);
         
         return NextResponse.json({ 
           loss: [], 
@@ -445,13 +445,13 @@ export async function GET(
       }
 
       // Parse all timestamped directories and combine the data
-      console.log('Processing all matching directories...');
+      // console.log('Processing all matching directories...');
       
       // Parse all directories with timestamps
       for (const dir of allDirs) {
         const hasTimestamp = dir.name.includes('_20') && dir.name.match(/_\d{8}-\d{6}$/);
         if (hasTimestamp) {
-          console.log('Parsing directory:', dir.path);
+          // console.log('Parsing directory:', dir.path);
           const dirData = parseTensorboardLog(dir.path);
           
           // Merge the data
@@ -482,11 +482,11 @@ export async function GET(
         }
       }
       
-      console.log('Combined tensorboard data:', { 
-        lossCount: data.loss.length, 
-        lrCount: data.learning_rate.length,
-        smoothLossCount: data.smooth_loss?.length || 0
-      });
+      // console.log('Combined tensorboard data:', {
+      //   lossCount: data.loss.length,
+      //   lrCount: data.learning_rate.length,
+      //   smoothLossCount: data.smooth_loss?.length || 0
+      // });
     } catch (error) {
       console.error('Error reading tensorboard directory:', error);
     }
