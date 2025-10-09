@@ -268,6 +268,7 @@ class ControlNetLLLiteNetwork(nn.Module):
         self.unet = unet
 
         # Create LLLite modules for each target block
+        print(f"[ControlNet-LLLite] Initializing with target_modules: {target_modules}")
         for name, module in unet.named_modules():
             for target in target_modules:
                 if target in name and 'transformer_blocks' in name:
@@ -280,6 +281,7 @@ class ControlNetLLLiteNetwork(nn.Module):
                         continue
 
                     module_name = name.replace('.', '_')
+                    print(f"[ControlNet-LLLite] Creating module for: {name} (in_dim={in_dim})")
                     self.lllite_modules[module_name] = ControlNetLLLiteModule(
                         in_dim=in_dim,
                         depth=depth,
@@ -287,6 +289,13 @@ class ControlNetLLLiteNetwork(nn.Module):
                         cond_emb_dim=cond_emb_dim,
                     )
                     break
+
+        print(f"[ControlNet-LLLite] Created {len(self.lllite_modules)} modules")
+        if len(self.lllite_modules) == 0:
+            print("[ControlNet-LLLite] WARNING: No modules were created! Check target_modules configuration.")
+            # Print some sample module names for debugging
+            sample_names = [name for i, (name, _) in enumerate(unet.named_modules()) if i < 20]
+            print(f"[ControlNet-LLLite] Sample UNet module names: {sample_names}")
 
         # Store original forward methods and inject our hooks
         self._original_forwards = {}
