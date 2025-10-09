@@ -265,15 +265,14 @@ class ControlNetLLLiteModule(nn.Module):
         h = self.output_layer(h)
 
         # Add to input with scaling
-        try:
-            result = x + h * alpha
-            return result
-        except Exception as e:
-            print(f"[DEBUG] Error in LLLite forward:")
-            print(f"  x.shape: {x.shape}, x.dtype: {x.dtype}")
-            print(f"  h.shape: {h.shape}, h.dtype: {h.dtype}")
-            print(f"  alpha: {alpha}, type: {type(alpha)}")
-            raise
+        # Handle alpha being either a scalar or a list
+        if isinstance(alpha, (list, tuple)):
+            alpha_value = alpha[0] if len(alpha) > 0 else 1.0
+        else:
+            alpha_value = alpha
+
+        result = x + h * alpha_value
+        return result
 
 
 class ControlNetLLLiteNetwork(nn.Module):
