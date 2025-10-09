@@ -342,6 +342,7 @@ class ControlNetLLLiteNetwork(nn.Module):
                     self._original_forwards[module_name] = module.forward
 
                     # Create wrapped forward with proper closure
+                    call_counter = [0]  # Mutable object for closure
                     def create_wrapper(orig_forward, lllite_module, network_ref, hook_name):
                         def wrapper(hidden_states, *args, **kwargs):
                             # Call original forward
@@ -353,10 +354,28 @@ class ControlNetLLLiteNetwork(nn.Module):
                                 with torch.set_grad_enabled(True):
                                     if isinstance(output, tuple):
                                         # BasicTransformerBlock returns (hidden_states,) or hidden_states
-                                        modified_output = lllite_module(output[0], network_ref.cond_image, network_ref.multiplier)
+                                        orig_tensor = output[0]
+                                        modified_output = lllite_module(orig_tensor, network_ref.cond_image, network_ref.multiplier)
+
+                                        # Debug first call
+                                        if call_counter[0] == 0:
+                                            print(f"[DEBUG] First LLLite call:")
+                                            print(f"  Input requires_grad: {orig_tensor.requires_grad}, has grad_fn: {orig_tensor.grad_fn is not None}")
+                                            print(f"  Output requires_grad: {modified_output.requires_grad}, has grad_fn: {modified_output.grad_fn is not None}")
+                                            call_counter[0] += 1
+
                                         output = (modified_output,) + output[1:]
                                     else:
-                                        output = lllite_module(output, network_ref.cond_image, network_ref.multiplier)
+                                        modified_output = lllite_module(output, network_ref.cond_image, network_ref.multiplier)
+
+                                        # Debug first call
+                                        if call_counter[0] == 0:
+                                            print(f"[DEBUG] First LLLite call (no tuple):")
+                                            print(f"  Input requires_grad: {output.requires_grad}, has grad_fn: {output.grad_fn is not None}")
+                                            print(f"  Output requires_grad: {modified_output.requires_grad}, has grad_fn: {modified_output.grad_fn is not None}")
+                                            call_counter[0] += 1
+
+                                        output = modified_output
 
                             return output
                         return wrapper
