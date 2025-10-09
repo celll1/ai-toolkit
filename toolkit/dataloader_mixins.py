@@ -1242,11 +1242,17 @@ class ControlFileItemDTOMixin:
                 self.control_path = self.control_path[0]
 
     def load_control_image(self: 'FileItemDTO'):
+        if not hasattr(ControlFileItemDTOMixin, '_load_debug_printed'):
+            ControlFileItemDTOMixin._load_debug_printed = True
+            print(f"[DEBUG] load_control_image called for: {self.path}")
+            print(f"[DEBUG] control_path: {self.control_path}")
+            print(f"[DEBUG] has_control_image: {self.has_control_image}")
+
         control_tensors = []
         control_path_list = self.control_path
         if not isinstance(self.control_path, list):
             control_path_list = [self.control_path]
-        
+
         for control_path in control_path_list:
             try:
                 img = Image.open(control_path).convert('RGB')
@@ -1306,6 +1312,10 @@ class ControlFileItemDTOMixin:
             self.control_tensor = control_tensors[0]
         else:
             self.control_tensor = torch.stack(control_tensors, dim=0)
+
+        if not hasattr(ControlFileItemDTOMixin, '_tensor_debug_printed'):
+            ControlFileItemDTOMixin._tensor_debug_printed = True
+            print(f"[DEBUG] control_tensor set: shape={self.control_tensor.shape if self.control_tensor is not None else None}")
 
     def cleanup_control(self: 'FileItemDTO'):
         self.control_tensor = None
