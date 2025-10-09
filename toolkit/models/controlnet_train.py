@@ -348,6 +348,11 @@ class ControlNetLLLiteNetwork(nn.Module):
                             # Call original forward
                             output = orig_forward(hidden_states, *args, **kwargs)
 
+                            # Debug: check state on first call
+                            if call_counter[0] == 0:
+                                print(f"[DEBUG] Hook called for {hook_name}: is_active={network_ref.is_active}, has_cond_image={network_ref.cond_image is not None}")
+                                call_counter[0] = -1  # Only print once
+
                             # Apply LLLite if active and we have conditioning image
                             if network_ref.is_active and network_ref.cond_image is not None:
                                 # Ensure gradients are enabled for LLLite computation
@@ -398,6 +403,7 @@ class ControlNetLLLiteNetwork(nn.Module):
     def set_cond_image(self, cond_image: torch.Tensor):
         """Set the conditioning image for the next forward pass"""
         self.cond_image = cond_image
+        print(f"[ControlNet-LLLite] set_cond_image called: shape={cond_image.shape if cond_image is not None else None}, is_active={self.is_active}")
 
     def to(self, *args, **kwargs):
         super().to(*args, **kwargs)
