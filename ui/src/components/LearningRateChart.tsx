@@ -1,5 +1,6 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp } from 'lucide-react';
+import { useMemo } from 'react';
 
 interface TensorboardEvent {
   step: number;
@@ -13,56 +14,55 @@ interface LearningRateChartProps {
 }
 
 export default function LearningRateChart({ data, isLoading = false }: LearningRateChartProps) {
-  const chartData = data.map(point => ({
+  // Memoize chart data to prevent unnecessary re-renders
+  const chartData = useMemo(() => data.map(point => ({
     step: point.step,
     lr: point.value
-  }));
+  })), [data]);
 
-  // Calculate nice Y-axis ticks with round numbers
-  const calculateNiceTicks = (dataMin: number, dataMax: number, maxTicks: number = 5): number[] => {
-    if (dataMin === dataMax) return [dataMin];
+  // Calculate nice Y-axis ticks (memoized)
+  const niceTicks = useMemo(() => {
+    const calculateNiceTicks = (dataMin: number, dataMax: number, maxTicks: number = 5): number[] => {
+      if (dataMin === dataMax) return [dataMin];
 
-    const range = dataMax - dataMin;
-    const roughStep = range / (maxTicks - 1);
+      const range = dataMax - dataMin;
+      const roughStep = range / (maxTicks - 1);
 
-    // Find nice step size (1, 2, 5, 10, 20, 50, 100, etc.)
-    const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
-    const normalized = roughStep / magnitude;
-    let niceStep;
+      // Find nice step size (1, 2, 5, 10, 20, 50, 100, etc.)
+      const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+      const normalized = roughStep / magnitude;
+      let niceStep;
 
-    if (normalized < 1.5) niceStep = 1 * magnitude;
-    else if (normalized < 3) niceStep = 2 * magnitude;
-    else if (normalized < 7) niceStep = 5 * magnitude;
-    else niceStep = 10 * magnitude;
+      if (normalized < 1.5) niceStep = 1 * magnitude;
+      else if (normalized < 3) niceStep = 2 * magnitude;
+      else if (normalized < 7) niceStep = 5 * magnitude;
+      else niceStep = 10 * magnitude;
 
-    // Generate ticks starting from floor and going up
-    const ticks: number[] = [];
-    const start = Math.floor(dataMin / niceStep) * niceStep;
-    const end = Math.ceil(dataMax / niceStep) * niceStep;
+      // Generate ticks starting from floor and going up
+      const ticks: number[] = [];
+      const start = Math.floor(dataMin / niceStep) * niceStep;
+      const end = Math.ceil(dataMax / niceStep) * niceStep;
 
-    for (let tick = start; tick <= end; tick += niceStep) {
-      ticks.push(tick);
-    }
+      for (let tick = start; tick <= end; tick += niceStep) {
+        ticks.push(tick);
+      }
 
-    return ticks;
-  };
+      return ticks;
+    };
 
-  // Get data range for Y-axis
-  const allValues = chartData.map(d => d.lr);
-  const dataMin = allValues.length > 0 ? Math.min(...allValues) : 0;
-  const dataMax = allValues.length > 0 ? Math.max(...allValues) : 1;
-  const niceTicks = calculateNiceTicks(dataMin, dataMax);
+    // Get data range for Y-axis
+    const allValues = chartData.map(d => d.lr);
+    const dataMin = allValues.length > 0 ? Math.min(...allValues) : 0;
+    const dataMax = allValues.length > 0 ? Math.max(...allValues) : 1;
+    return calculateNiceTicks(dataMin, dataMax);
+  }, [chartData]);
 
-  // Format Y-axis tick labels
+  // Format Y-axis tick labels in scientific notation
   const formatYAxis = (value: number) => {
     if (value === 0) return '0';
-    if (Math.abs(value) >= 0.1) {
-      return value.toFixed(4);
-    } else if (Math.abs(value) >= 0.00001) {
-      return value.toFixed(6);
-    } else {
-      return value.toFixed(8);
-    }
+    const exponent = Math.floor(Math.log10(Math.abs(value)));
+    const mantissa = value / Math.pow(10, exponent);
+    return `${mantissa.toFixed(1)}e${exponent}`;
   };
 
   return (
@@ -88,6 +88,8 @@ export default function LearningRateChart({ data, isLoading = false }: LearningR
                 fontSize={11}
                 tickLine={false}
                 axisLine={false}
+                domain={['dataMin', 'dataMax']}
+                allowDataOverflow={false}
               />
               <YAxis
                 stroke="#9CA3AF"
