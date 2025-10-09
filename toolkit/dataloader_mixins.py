@@ -1190,6 +1190,14 @@ class ControlFileItemDTOMixin:
         self.full_size_control_images = False
         img_path = kwargs.get('path', None)
 
+        # Debug: log the first few files
+        if not hasattr(ControlFileItemDTOMixin, '_debug_printed'):
+            ControlFileItemDTOMixin._debug_printed = True
+            print(f"[DEBUG ControlFileItemDTOMixin] paired_files={dataset_config.paired_files if dataset_config else 'NO CONFIG'}")
+            print(f"[DEBUG ControlFileItemDTOMixin] source_suffix={dataset_config.source_suffix if dataset_config and hasattr(dataset_config, 'source_suffix') else 'N/A'}")
+            print(f"[DEBUG ControlFileItemDTOMixin] target_suffix={dataset_config.target_suffix if dataset_config and hasattr(dataset_config, 'target_suffix') else 'N/A'}")
+            print(f"[DEBUG ControlFileItemDTOMixin] img_path={img_path}")
+
         # Handle paired files mode
         if dataset_config.paired_files:
             # For paired files, replace target suffix with source suffix
