@@ -235,8 +235,27 @@ class ControlNetLLLiteModule(nn.Module):
         cond_emb = self.conditioning_encoder(cond_image)  # [B, cond_emb_dim, H, W]
 
         # Pool conditioning to match sequence length
-        cond_emb = F.adaptive_avg_pool2d(cond_emb, (int(x.shape[1]**0.5), int(x.shape[1]**0.5)))
-        cond_emb = cond_emb.flatten(2).transpose(1, 2)  # [B, L, cond_emb_dim]
+        # Calculate the spatial dimensions from sequence length
+        seq_len = x.shape[1]
+        spatial_size = int(seq_len ** 0.5)
+
+        # If sequence length is not a perfect square, we need to handle it
+        if spatial_size * spatial_size != seq_len:
+            # Try to find the closest factors
+            import math
+            spatial_size = int(math.ceil(seq_len ** 0.5))
+
+        cond_emb = F.adaptive_avg_pool2d(cond_emb, (spatial_size, spatial_size))
+        cond_emb = cond_emb.flatten(2).transpose(1, 2)  # [B, spatial_size*spatial_size, cond_emb_dim]
+
+        # Trim or pad to match exact sequence length
+        if cond_emb.shape[1] > seq_len:
+            cond_emb = cond_emb[:, :seq_len, :]
+        elif cond_emb.shape[1] < seq_len:
+            # Pad with zeros
+            padding = torch.zeros(cond_emb.shape[0], seq_len - cond_emb.shape[1], cond_emb.shape[2],
+                                device=cond_emb.device, dtype=cond_emb.dtype)
+            cond_emb = torch.cat([cond_emb, padding], dim=1)
 
         # Concatenate with input
         h = torch.cat([x, cond_emb], dim=-1)
