@@ -34,6 +34,7 @@ class ControlNetNetwork(nn.Module):
         self.is_active = True
         self.multiplier = 1.0
         self.can_merge_in = False  # ControlNet cannot be merged into UNet
+        self.is_merged_in = False  # Track merge state
 
         # Create ControlNet model based on UNet architecture
         if conditioning_embedding_out_channels is None:
@@ -265,6 +266,7 @@ class ControlNetLLLiteNetwork(nn.Module):
         self.is_active = True
         self.multiplier = 1.0
         self.can_merge_in = False  # ControlNet-LLLite cannot be merged into UNet
+        self.is_merged_in = False  # Track merge state
 
         # Default target modules (attention blocks)
         if target_modules is None:
