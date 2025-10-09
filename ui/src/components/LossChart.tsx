@@ -22,42 +22,50 @@ export default function LossChart({ data, smoothData, isLoading = false }: LossC
     smoothLoss: smoothData?.[index]?.value
   })), [data, smoothData]);
 
+  // Helper function to calculate nice ticks
+  const calculateNiceTicks = (dataMin: number, dataMax: number, maxTicks: number = 5): number[] => {
+    if (dataMin === dataMax) return [dataMin];
+
+    const range = dataMax - dataMin;
+    const roughStep = range / (maxTicks - 1);
+
+    // Find nice step size (1, 2, 5, 10, 20, 50, 100, etc.)
+    const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+    const normalized = roughStep / magnitude;
+    let niceStep;
+
+    if (normalized < 1.5) niceStep = 1 * magnitude;
+    else if (normalized < 3) niceStep = 2 * magnitude;
+    else if (normalized < 7) niceStep = 5 * magnitude;
+    else niceStep = 10 * magnitude;
+
+    // Generate ticks starting from floor and going up
+    const ticks: number[] = [];
+    const start = Math.floor(dataMin / niceStep) * niceStep;
+    const end = Math.ceil(dataMax / niceStep) * niceStep;
+
+    for (let tick = start; tick <= end; tick += niceStep) {
+      ticks.push(tick);
+    }
+
+    return ticks;
+  };
+
   // Calculate nice Y-axis ticks (memoized)
-  const niceTicks = useMemo(() => {
-    const calculateNiceTicks = (dataMin: number, dataMax: number, maxTicks: number = 5): number[] => {
-      if (dataMin === dataMax) return [dataMin];
-
-      const range = dataMax - dataMin;
-      const roughStep = range / (maxTicks - 1);
-
-      // Find nice step size (1, 2, 5, 10, 20, 50, 100, etc.)
-      const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
-      const normalized = roughStep / magnitude;
-      let niceStep;
-
-      if (normalized < 1.5) niceStep = 1 * magnitude;
-      else if (normalized < 3) niceStep = 2 * magnitude;
-      else if (normalized < 7) niceStep = 5 * magnitude;
-      else niceStep = 10 * magnitude;
-
-      // Generate ticks starting from floor and going up
-      const ticks: number[] = [];
-      const start = Math.floor(dataMin / niceStep) * niceStep;
-      const end = Math.ceil(dataMax / niceStep) * niceStep;
-
-      for (let tick = start; tick <= end; tick += niceStep) {
-        ticks.push(tick);
-      }
-
-      return ticks;
-    };
-
-    // Get data range for Y-axis
+  const niceYTicks = useMemo(() => {
     const allValues = [...chartData.map(d => d.loss), ...(smoothData ? chartData.map(d => d.smoothLoss).filter(v => v !== undefined) : [])] as number[];
     const dataMin = allValues.length > 0 ? Math.min(...allValues) : 0;
     const dataMax = allValues.length > 0 ? Math.max(...allValues) : 1;
     return calculateNiceTicks(dataMin, dataMax);
   }, [chartData, smoothData]);
+
+  // Calculate nice X-axis ticks (memoized)
+  const niceXTicks = useMemo(() => {
+    const allSteps = chartData.map(d => d.step);
+    const minStep = allSteps.length > 0 ? Math.min(...allSteps) : 0;
+    const maxStep = allSteps.length > 0 ? Math.max(...allSteps) : 1;
+    return calculateNiceTicks(minStep, maxStep, 6);
+  }, [chartData]);
 
   // Format Y-axis tick labels
   const formatYAxis = (value: number) => {
@@ -96,7 +104,8 @@ export default function LossChart({ data, smoothData, isLoading = false }: LossC
                 fontSize={11}
                 tickLine={false}
                 axisLine={false}
-                domain={['dataMin', 'dataMax']}
+                domain={[niceXTicks[0], niceXTicks[niceXTicks.length - 1]]}
+                ticks={niceXTicks}
                 allowDataOverflow={false}
               />
               <YAxis
@@ -104,8 +113,8 @@ export default function LossChart({ data, smoothData, isLoading = false }: LossC
                 fontSize={11}
                 tickLine={false}
                 axisLine={false}
-                domain={[niceTicks[0], niceTicks[niceTicks.length - 1]]}
-                ticks={niceTicks}
+                domain={[niceYTicks[0], niceYTicks[niceYTicks.length - 1]]}
+                ticks={niceYTicks}
                 tickFormatter={formatYAxis}
                 width={60}
               />
