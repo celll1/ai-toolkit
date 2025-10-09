@@ -80,9 +80,13 @@ class ControlNetNetwork(nn.Module):
         """Prepare parameters for optimizer"""
         all_params = []
 
+        # Ensure all parameters require gradients
+        for param in self.controlnet.parameters():
+            param.requires_grad_(True)
+
         # All ControlNet parameters are trainable
         all_params.append({
-            'params': self.controlnet.parameters(),
+            'params': list(self.controlnet.parameters()),
             'lr': learning_rate
         })
 
@@ -378,9 +382,13 @@ class ControlNetLLLiteNetwork(nn.Module):
         """Prepare parameters for optimizer"""
         all_params = []
 
+        # Ensure all parameters require gradients
+        for param in self.lllite_modules.parameters():
+            param.requires_grad_(True)
+
         # All LLLite module parameters are trainable
         all_params.append({
-            'params': self.lllite_modules.parameters(),
+            'params': list(self.lllite_modules.parameters()),
             'lr': learning_rate
         })
 
