@@ -289,27 +289,30 @@ class ControlNetLLLiteNetwork(nn.Module):
         self.unet = unet
 
         # Create LLLite modules for each target block
+        # Target transformer blocks, not individual attention layers
         print(f"[ControlNet-LLLite] Initializing with target_modules: {target_modules}")
-        for name, module in unet.named_modules():
-            for target in target_modules:
-                if target in name and 'transformer_blocks' in name:
-                    # Get the dimension of this block
-                    if hasattr(module, 'to_q'):
-                        in_dim = module.to_q.in_features
-                    elif hasattr(module, 'proj_in'):
-                        in_dim = module.proj_in.out_features
-                    else:
-                        continue
+        from diffusers.models.attention import BasicTransformerBlock
 
-                    module_name = name.replace('.', '_')
-                    print(f"[ControlNet-LLLite] Creating module for: {name} (in_dim={in_dim})")
-                    self.lllite_modules[module_name] = ControlNetLLLiteModule(
-                        in_dim=in_dim,
-                        depth=depth,
-                        hidden_dim=hidden_dim,
-                        cond_emb_dim=cond_emb_dim,
-                    )
-                    break
+        for name, module in unet.named_modules():
+            # Target BasicTransformerBlock modules in specified blocks
+            if isinstance(module, BasicTransformerBlock):
+                for target in target_modules:
+                    if target in name:
+                        # Get the dimension from the attention layer
+                        if hasattr(module.attn1, 'to_q'):
+                            in_dim = module.attn1.to_q.in_features
+                        else:
+                            continue
+
+                        module_name = name.replace('.', '_')
+                        print(f"[ControlNet-LLLite] Creating module for: {name} (in_dim={in_dim})")
+                        self.lllite_modules[module_name] = ControlNetLLLiteModule(
+                            in_dim=in_dim,
+                            depth=depth,
+                            hidden_dim=hidden_dim,
+                            cond_emb_dim=cond_emb_dim,
+                        )
+                        break
 
         print(f"[ControlNet-LLLite] Created {len(self.lllite_modules)} modules")
         if len(self.lllite_modules) == 0:
@@ -328,39 +331,50 @@ class ControlNetLLLiteNetwork(nn.Module):
 
     def _inject_hooks(self):
         """Inject forward hooks into UNet transformer blocks"""
+        hook_count = 0
+        from diffusers.models.attention import BasicTransformerBlock
+
         for name, module in self.unet.named_modules():
-            module_name = name.replace('.', '_')
-            if module_name in self.lllite_modules:
-                # Store original forward
-                self._original_forwards[module_name] = module.forward
+            if isinstance(module, BasicTransformerBlock):
+                module_name = name.replace('.', '_')
+                if module_name in self.lllite_modules:
+                    # Store original forward
+                    self._original_forwards[module_name] = module.forward
 
-                # Create wrapped forward with proper closure
-                def create_wrapper(orig_forward, lllite_module, network_ref):
-                    def wrapper(hidden_states, *args, **kwargs):
-                        # Call original forward
-                        output = orig_forward(hidden_states, *args, **kwargs)
+                    # Create wrapped forward with proper closure
+                    def create_wrapper(orig_forward, lllite_module, network_ref, hook_name):
+                        def wrapper(hidden_states, *args, **kwargs):
+                            # Call original forward
+                            output = orig_forward(hidden_states, *args, **kwargs)
 
-                        # Apply LLLite if active and we have conditioning image
-                        if network_ref.is_active and network_ref.cond_image is not None:
-                            # Ensure gradients are enabled for LLLite computation
-                            with torch.set_grad_enabled(True):
-                                if isinstance(output, tuple):
-                                    modified_output = lllite_module(output[0], network_ref.cond_image, network_ref.multiplier)
-                                    output = (modified_output,) + output[1:]
-                                else:
-                                    output = lllite_module(output, network_ref.cond_image, network_ref.multiplier)
+                            # Apply LLLite if active and we have conditioning image
+                            if network_ref.is_active and network_ref.cond_image is not None:
+                                # Ensure gradients are enabled for LLLite computation
+                                with torch.set_grad_enabled(True):
+                                    if isinstance(output, tuple):
+                                        # BasicTransformerBlock returns (hidden_states,) or hidden_states
+                                        modified_output = lllite_module(output[0], network_ref.cond_image, network_ref.multiplier)
+                                        output = (modified_output,) + output[1:]
+                                    else:
+                                        output = lllite_module(output, network_ref.cond_image, network_ref.multiplier)
 
-                        return output
-                    return wrapper
+                            return output
+                        return wrapper
 
-                module.forward = create_wrapper(module.forward, self.lllite_modules[module_name], self)
+                    module.forward = create_wrapper(module.forward, self.lllite_modules[module_name], self, module_name)
+                    hook_count += 1
+
+        print(f"[ControlNet-LLLite] Injected {hook_count} hooks into UNet")
 
     def _remove_hooks(self):
         """Remove hooks and restore original forward methods"""
+        from diffusers.models.attention import BasicTransformerBlock
+
         for name, module in self.unet.named_modules():
-            module_name = name.replace('.', '_')
-            if module_name in self._original_forwards:
-                module.forward = self._original_forwards[module_name]
+            if isinstance(module, BasicTransformerBlock):
+                module_name = name.replace('.', '_')
+                if module_name in self._original_forwards:
+                    module.forward = self._original_forwards[module_name]
 
     def set_cond_image(self, cond_image: torch.Tensor):
         """Set the conditioning image for the next forward pass"""
