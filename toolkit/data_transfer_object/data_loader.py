@@ -162,7 +162,12 @@ class DataLoaderBatchDTO:
             self.prompt_embeds: Union[PromptEmbeds, None] = None
             # if self.file_items[0].control_tensor is not None:
             # if any have a control tensor, we concatenate them
-            if any([x.control_tensor is not None for x in self.file_items]):
+            has_control = any([x.control_tensor is not None for x in self.file_items])
+            if not hasattr(BatchItemDTO, '_control_debug_printed'):
+                BatchItemDTO._control_debug_printed = True
+                print(f"[DEBUG BatchItemDTO] has_control={has_control}")
+                print(f"[DEBUG BatchItemDTO] file_items control_tensors: {[x.control_tensor is not None for x in self.file_items]}")
+            if has_control:
                 # find one to use as a base
                 base_control_tensor = None
                 for x in self.file_items:
@@ -176,6 +181,9 @@ class DataLoaderBatchDTO:
                     else:
                         control_tensors.append(x.control_tensor)
                 self.control_tensor = torch.cat([x.unsqueeze(0) for x in control_tensors])
+                if not hasattr(BatchItemDTO, '_control_tensor_debug_printed'):
+                    BatchItemDTO._control_tensor_debug_printed = True
+                    print(f"[DEBUG BatchItemDTO] control_tensor created: shape={self.control_tensor.shape}")
                 
             self.inpaint_tensor: Union[torch.Tensor, None] = None
             if any([x.inpaint_tensor is not None for x in self.file_items]):
