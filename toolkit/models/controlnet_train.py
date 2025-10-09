@@ -162,6 +162,11 @@ class ControlNetNetwork(nn.Module):
         """Set evaluation mode"""
         return self.train(False)
 
+    def enable_gradient_checkpointing(self):
+        """Enable gradient checkpointing for ControlNet"""
+        if hasattr(self.controlnet, 'enable_gradient_checkpointing'):
+            self.controlnet.enable_gradient_checkpointing()
+
 
 class ControlNetLLLiteModule(nn.Module):
     """
@@ -428,6 +433,13 @@ class ControlNetLLLiteNetwork(nn.Module):
     def eval(self):
         """Set evaluation mode"""
         return self.train(False)
+
+    def enable_gradient_checkpointing(self):
+        """Enable gradient checkpointing for ControlNet-LLLite"""
+        # LLLite modules are relatively small, but we can enable it for the conditioning encoder
+        for module in self.lllite_modules.values():
+            if hasattr(module.conditioning_encoder, 'gradient_checkpointing'):
+                module.conditioning_encoder.gradient_checkpointing = True
 
     def __del__(self):
         """Cleanup: remove hooks when object is deleted"""
