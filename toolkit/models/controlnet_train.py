@@ -262,6 +262,17 @@ class ControlNetLLLiteModule(nn.Module):
                                 device=cond_emb.device, dtype=cond_emb.dtype)
             cond_emb = torch.cat([cond_emb, padding], dim=1)
 
+        # Handle batch size mismatch between x and cond_image
+        # During sampling, pipeline may batch conditional/unconditional together
+        if x.shape[0] != cond_emb.shape[0]:
+            # Repeat cond_emb to match batch size
+            repeat_factor = x.shape[0] // cond_emb.shape[0]
+            if repeat_factor > 1:
+                cond_emb = cond_emb.repeat(repeat_factor, 1, 1)
+            else:
+                # Batch size mismatch in other direction - take first sample
+                cond_emb = cond_emb[:x.shape[0]]
+
         # Concatenate with input
         h = torch.cat([x, cond_emb], dim=-1)
 
