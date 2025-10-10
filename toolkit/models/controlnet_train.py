@@ -193,111 +193,163 @@ class ControlNetNetwork(nn.Module):
 
 class ControlNetLLLiteModule(nn.Module):
     """
-    Single ControlNet-LLLite module that attaches to one transformer block
-    Much lighter than full ControlNet
+    Single ControlNet-LLLite module (kohya-ss compatible)
+    Attaches to one transformer or conv block
     """
 
     def __init__(
         self,
-        in_dim: int,
+        name: str,
+        org_module: nn.Module,
+        cond_emb_dim: int = 320,
+        mlp_dim: int = 1024,
         depth: int = 2,
-        hidden_dim: int = 1024,
-        cond_emb_dim: int = 768,
+        dropout: float = 0.0,
+        multiplier: float = 1.0,
     ):
         super().__init__()
 
-        # Conditioning encoder
-        self.conditioning_encoder = nn.Sequential(
-            nn.Conv2d(3, 16, 3, padding=1),
-            nn.SiLU(),
-            nn.Conv2d(16, 16, 3, padding=1),
-            nn.SiLU(),
-            nn.Conv2d(16, cond_emb_dim, 3, padding=1),
-            nn.SiLU(),
-        )
+        self.lllite_name = name
+        self.multiplier = multiplier
+        self.org_module = [org_module]  # Keep reference
+        self.is_conv2d = org_module.__class__.__name__ == "Conv2d"
+        self.dropout = dropout if dropout > 0 else None
+        self.cond_emb_dim = cond_emb_dim
 
-        # Control net layers (lightweight)
-        layers = []
-        for i in range(depth):
-            if i == 0:
-                layers.append(nn.Linear(in_dim + cond_emb_dim, hidden_dim))
-            else:
-                layers.append(nn.Linear(hidden_dim, hidden_dim))
-            layers.append(nn.SiLU())
+        # Determine input dimension
+        if self.is_conv2d:
+            in_dim = org_module.in_channels
+        else:
+            in_dim = org_module.in_features
 
-        # Output layer (zero initialized)
-        self.control_layers = nn.Sequential(*layers)
-        self.output_layer = nn.Linear(hidden_dim, in_dim)
+        # Conditioning encoder (embeds control image)
+        # This is shared across all modules and will be set externally
+        modules = []
+        modules.append(nn.Conv2d(3, cond_emb_dim // 2, kernel_size=4, stride=4, padding=0))
 
-        # Zero initialize output layer
-        nn.init.zeros_(self.output_layer.weight)
-        nn.init.zeros_(self.output_layer.bias)
+        if depth == 1:
+            modules.append(nn.ReLU(inplace=True))
+            modules.append(nn.Conv2d(cond_emb_dim // 2, cond_emb_dim, kernel_size=2, stride=2, padding=0))
+        elif depth == 2:
+            modules.append(nn.ReLU(inplace=True))
+            modules.append(nn.Conv2d(cond_emb_dim // 2, cond_emb_dim, kernel_size=4, stride=4, padding=0))
+        elif depth == 3:
+            modules.append(nn.ReLU(inplace=True))
+            modules.append(nn.Conv2d(cond_emb_dim // 2, cond_emb_dim // 2, kernel_size=4, stride=4, padding=0))
+            modules.append(nn.ReLU(inplace=True))
+            modules.append(nn.Conv2d(cond_emb_dim // 2, cond_emb_dim, kernel_size=2, stride=2, padding=0))
 
-    def forward(self, x: torch.Tensor, cond_image: torch.Tensor, alpha: float = 1.0):
+        self.conditioning1 = nn.Sequential(*modules)
+
+        # Down, mid, up modules (kohya-ss structure)
+        if self.is_conv2d:
+            # Conv2d version
+            self.down = nn.Sequential(
+                nn.Conv2d(in_dim, mlp_dim, kernel_size=1, stride=1, padding=0),
+                nn.ReLU(inplace=True),
+            )
+            self.mid = nn.Sequential(
+                nn.Conv2d(mlp_dim + cond_emb_dim, mlp_dim, kernel_size=1, stride=1, padding=0),
+                nn.ReLU(inplace=True),
+            )
+            self.up = nn.Sequential(
+                nn.Conv2d(mlp_dim, in_dim, kernel_size=1, stride=1, padding=0),
+            )
+        else:
+            # Linear version
+            self.down = nn.Sequential(
+                nn.Linear(in_dim, mlp_dim),
+                nn.ReLU(inplace=True),
+            )
+            self.mid = nn.Sequential(
+                nn.Linear(mlp_dim + cond_emb_dim, mlp_dim),
+                nn.ReLU(inplace=True),
+            )
+            self.up = nn.Sequential(
+                nn.Linear(mlp_dim, in_dim),
+            )
+
+        # Zero initialize up module
+        if self.is_conv2d:
+            nn.init.zeros_(self.up[0].weight)
+            nn.init.zeros_(self.up[0].bias)
+        else:
+            nn.init.zeros_(self.up[0].weight)
+            nn.init.zeros_(self.up[0].bias)
+
+    def set_cond_emb(self, cond_emb: torch.Tensor):
+        """Set the conditioning embedding for the next forward pass"""
+        self.cond_emb = cond_emb
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
+        Forward pass following kohya-ss implementation
+
         Args:
-            x: Input features [B, L, C]
-            cond_image: Conditioning image [B, 3, H, W]
-            alpha: Scaling factor
+            x: Input tensor from original module
+        Returns:
+            Modified input tensor with control applied
         """
-        # Encode conditioning image
-        cond_emb = self.conditioning_encoder(cond_image)  # [B, cond_emb_dim, H, W]
+        # If multiplier is 0 or no conditioning, return original
+        if self.multiplier == 0.0 or not hasattr(self, 'cond_emb') or self.cond_emb is None:
+            return x
 
-        # Pool conditioning to match sequence length
-        # Calculate the spatial dimensions from sequence length
-        seq_len = x.shape[1]
-        spatial_size = int(seq_len ** 0.5)
+        cond_emb = self.cond_emb
 
-        # If sequence length is not a perfect square, we need to handle it
-        if spatial_size * spatial_size != seq_len:
-            # Try to find the closest factors
-            import math
-            spatial_size = int(math.ceil(seq_len ** 0.5))
-
-        cond_emb = F.adaptive_avg_pool2d(cond_emb, (spatial_size, spatial_size))
-        cond_emb = cond_emb.flatten(2).transpose(1, 2)  # [B, spatial_size*spatial_size, cond_emb_dim]
-
-        # Trim or pad to match exact sequence length
-        if cond_emb.shape[1] > seq_len:
-            cond_emb = cond_emb[:, :seq_len, :]
-        elif cond_emb.shape[1] < seq_len:
-            # Pad with zeros
-            padding = torch.zeros(cond_emb.shape[0], seq_len - cond_emb.shape[1], cond_emb.shape[2],
-                                device=cond_emb.device, dtype=cond_emb.dtype)
-            cond_emb = torch.cat([cond_emb, padding], dim=1)
-
-        # Handle batch size mismatch between x and cond_image
-        # During sampling, pipeline may batch conditional/unconditional together
+        # Handle batch size mismatch (for CFG in inference)
         if x.shape[0] != cond_emb.shape[0]:
-            # Repeat cond_emb to match batch size
             repeat_factor = x.shape[0] // cond_emb.shape[0]
             if repeat_factor > 1:
-                cond_emb = cond_emb.repeat(repeat_factor, 1, 1)
-            else:
-                # Batch size mismatch in other direction - take first sample
-                cond_emb = cond_emb[:x.shape[0]]
+                cond_emb = cond_emb.repeat(repeat_factor, 1, 1, 1)
 
-        # Concatenate with input
-        h = torch.cat([x, cond_emb], dim=-1)
+        # Process through down
+        h = self.down(x)
 
-        # Pass through control layers
-        h = self.control_layers(h)
-        h = self.output_layer(h)
+        # Handle reshaping for Linear modules
+        if not self.is_conv2d:
+            # x is [B, L, C] for attention
+            B, L, C = h.shape
+            # cond_emb is [B, cond_emb_dim, H, W]
+            # Reshape cond_emb to [B, H*W, cond_emb_dim]
+            cond_emb = cond_emb.flatten(2).transpose(1, 2)  # [B, H*W, cond_emb_dim]
 
-        # Add to input with scaling
-        # Handle alpha being either a scalar or a list
-        if isinstance(alpha, (list, tuple)):
-            alpha_value = alpha[0] if len(alpha) > 0 else 1.0
+            # Match sequence length
+            if cond_emb.shape[1] != L:
+                # Interpolate or pad/trim to match
+                if cond_emb.shape[1] > L:
+                    cond_emb = cond_emb[:, :L, :]
+                else:
+                    # Pad with zeros
+                    padding = torch.zeros(B, L - cond_emb.shape[1], cond_emb.shape[2],
+                                        device=cond_emb.device, dtype=cond_emb.dtype)
+                    cond_emb = torch.cat([cond_emb, padding], dim=1)
+
+            # Concatenate along channel dimension
+            h = torch.cat([h, cond_emb], dim=-1)  # [B, L, mlp_dim + cond_emb_dim]
         else:
-            alpha_value = alpha
+            # For Conv2d, concatenate along channel dimension
+            # Ensure spatial dimensions match
+            if h.shape[2:] != cond_emb.shape[2:]:
+                cond_emb = F.interpolate(cond_emb, size=h.shape[2:], mode='bilinear', align_corners=False)
+            h = torch.cat([h, cond_emb], dim=1)  # [B, mlp_dim + cond_emb_dim, H, W]
 
-        result = x + h * alpha_value
-        return result
+        # Process through mid
+        h = self.mid(h)
+
+        # Apply dropout if training
+        if self.dropout is not None and self.training:
+            h = F.dropout(h, p=self.dropout, training=self.training)
+
+        # Process through up and scale by multiplier
+        h = self.up(h) * self.multiplier
+
+        # Add to original input
+        return x + h
 
 
 class ControlNetLLLiteNetwork(nn.Module):
     """
-    ControlNet-LLLite training network
+    ControlNet-LLLite training network (kohya-ss compatible)
     Lightweight alternative to full ControlNet
     Attaches small modules to transformer blocks
     """
@@ -305,115 +357,95 @@ class ControlNetLLLiteNetwork(nn.Module):
     def __init__(
         self,
         unet: UNet2DConditionModel,
-        target_modules: Optional[List[str]] = None,
+        cond_emb_dim: int = 320,
+        mlp_dim: int = 1024,
         depth: int = 2,
-        hidden_dim: int = 1024,
-        cond_emb_dim: int = 768,
+        dropout: float = 0.0,
+        multiplier: float = 1.0,
         **kwargs
     ):
         super().__init__()
 
         self.is_active = True
-        self.multiplier = 1.0
-        self.can_merge_in = False  # ControlNet-LLLite cannot be merged into UNet
-        self.is_merged_in = False  # Track merge state
+        self.multiplier = multiplier
+        self.can_merge_in = False
+        self.is_merged_in = False
+        self.cond_emb_dim = cond_emb_dim
+        self.depth = depth
 
-        # Default target modules (attention blocks)
-        if target_modules is None:
-            target_modules = [
-                'down_blocks.0',
-                'down_blocks.1',
-                'down_blocks.2',
-                'mid_block',
-                'up_blocks.0',
-                'up_blocks.1',
-                'up_blocks.2',
-            ]
-
-        self.target_modules = target_modules
-        self.lllite_modules = nn.ModuleDict()
         self.unet = unet
+        self.lllite_modules = nn.ModuleDict()
 
-        # Create LLLite modules for each target block
-        # Target transformer blocks, not individual attention layers
-        print(f"[ControlNet-LLLite] Initializing with target_modules: {target_modules}")
+        # Create modules for target blocks (following kohya-ss logic)
         from diffusers.models.attention import BasicTransformerBlock
+        from diffusers.models.resnet import ResnetBlock2D, Downsample2D, Upsample2D
 
+        module_count = 0
         for name, module in unet.named_modules():
-            # Target BasicTransformerBlock modules in specified blocks
-            if isinstance(module, BasicTransformerBlock):
-                for target in target_modules:
-                    if target in name:
-                        # Get the dimension from the attention layer
-                        if hasattr(module.attn1, 'to_q'):
-                            in_dim = module.attn1.to_q.in_features
-                        else:
-                            continue
+            # Target specific module types
+            is_target = False
 
-                        module_name = name.replace('.', '_')
-                        print(f"[ControlNet-LLLite] Creating module for: {name} (in_dim={in_dim})")
+            if isinstance(module, (BasicTransformerBlock)):
+                # Target transformer blocks
+                is_target = True
+            elif isinstance(module, (ResnetBlock2D, Downsample2D, Upsample2D)):
+                # Also target resnet blocks (optional, can be controlled by config)
+                is_target = False  # Set to True if you want to target these too
+
+            if is_target:
+                # Get module dimension
+                if hasattr(module, 'proj_in') and hasattr(module.proj_in, 'in_features'):
+                    # Transformer block
+                    pass  # Will hook the attention layers
+                elif isinstance(module, BasicTransformerBlock):
+                    # Hook the cross-attention layer (attn1)
+                    if hasattr(module, 'attn1'):
+                        attn_module = module.attn1.to_q  # Use to_q as representative
+                        module_name = f"lllite_unet_{name.replace('.', '_')}_attn1_to_q"
+
                         self.lllite_modules[module_name] = ControlNetLLLiteModule(
-                            in_dim=in_dim,
-                            depth=depth,
-                            hidden_dim=hidden_dim,
+                            name=module_name,
+                            org_module=attn_module,
                             cond_emb_dim=cond_emb_dim,
+                            mlp_dim=mlp_dim,
+                            depth=depth,
+                            dropout=dropout,
+                            multiplier=multiplier,
                         )
-                        break
+                        module_count += 1
 
-        print(f"[ControlNet-LLLite] Created {len(self.lllite_modules)} modules")
-        if len(self.lllite_modules) == 0:
-            print("[ControlNet-LLLite] WARNING: No modules were created! Check target_modules configuration.")
-            # Print some sample module names for debugging
-            sample_names = [name for i, (name, _) in enumerate(unet.named_modules()) if i < 20]
-            print(f"[ControlNet-LLLite] Sample UNet module names: {sample_names}")
+        print(f"[ControlNet-LLLite] Created {module_count} LLLite modules")
 
-        # Store original forward methods and inject our hooks
+        # Store original forward methods
         self._original_forwards = {}
         self._inject_hooks()
 
         self.device = None
         self.dtype = None
         self.cond_image = None
+        self.cond_emb = None
 
     def _inject_hooks(self):
-        """Inject forward hooks into UNet transformer blocks"""
-        hook_count = 0
+        """Inject forward hooks into target modules"""
         from diffusers.models.attention import BasicTransformerBlock
 
         for name, module in self.unet.named_modules():
             if isinstance(module, BasicTransformerBlock):
-                module_name = name.replace('.', '_')
-                if module_name in self.lllite_modules:
-                    # Store original forward
-                    self._original_forwards[module_name] = module.forward
+                # Hook attn1.to_q
+                if hasattr(module.attn1, 'to_q'):
+                    module_name = f"lllite_unet_{name.replace('.', '_')}_attn1_to_q"
+                    if module_name in self.lllite_modules:
+                        lllite_module = self.lllite_modules[module_name]
+                        orig_forward = module.attn1.to_q.forward
+                        self._original_forwards[module_name] = orig_forward
 
-                    # Create wrapped forward with proper closure
-                    call_counter = [0]  # Mutable object for closure
-                    def create_wrapper(orig_forward, lllite_module, network_ref, hook_name):
-                        def wrapper(hidden_states, *args, **kwargs):
-                            # Call original forward
-                            output = orig_forward(hidden_states, *args, **kwargs)
+                        def create_wrapper(orig_fwd, lllite_mod):
+                            def wrapper(x):
+                                # Call LLLite module which will apply control
+                                return lllite_mod(orig_fwd(x))
+                            return wrapper
 
-                            # Apply LLLite if active and we have conditioning image
-                            if network_ref.is_active and network_ref.cond_image is not None:
-                                # Ensure gradients are enabled for LLLite computation
-                                with torch.set_grad_enabled(True):
-                                    if isinstance(output, tuple):
-                                        # BasicTransformerBlock returns (hidden_states,) or hidden_states
-                                        orig_tensor = output[0]
-                                        modified_output = lllite_module(orig_tensor, network_ref.cond_image, network_ref.multiplier)
-                                        output = (modified_output,) + output[1:]
-                                    else:
-                                        modified_output = lllite_module(output, network_ref.cond_image, network_ref.multiplier)
-                                        output = modified_output
-
-                            return output
-                        return wrapper
-
-                    module.forward = create_wrapper(module.forward, self.lllite_modules[module_name], self, module_name)
-                    hook_count += 1
-
-        print(f"[ControlNet-LLLite] Injected {hook_count} hooks into UNet")
+                        module.attn1.to_q.forward = create_wrapper(orig_forward, lllite_module)
 
     def _remove_hooks(self):
         """Remove hooks and restore original forward methods"""
@@ -421,14 +453,36 @@ class ControlNetLLLiteNetwork(nn.Module):
 
         for name, module in self.unet.named_modules():
             if isinstance(module, BasicTransformerBlock):
-                module_name = name.replace('.', '_')
+                module_name = f"lllite_unet_{name.replace('.', '_')}_attn1_to_q"
                 if module_name in self._original_forwards:
-                    module.forward = self._original_forwards[module_name]
+                    module.attn1.to_q.forward = self._original_forwards[module_name]
 
     def set_cond_image(self, cond_image: torch.Tensor):
-        """Set the conditioning image for the next forward pass"""
+        """
+        Set the conditioning image and compute embeddings
+
+        Args:
+            cond_image: Control image tensor [B, 3, H, W]
+        """
         self.cond_image = cond_image
-        # print(f"[ControlNet-LLLite] set_cond_image called: shape={cond_image.shape if cond_image is not None else None}, is_active={self.is_active}")
+
+        if cond_image is None:
+            self.cond_emb = None
+            for module in self.lllite_modules.values():
+                module.set_cond_emb(None)
+            return
+
+        # Compute conditioning embedding using the first module's conditioning1
+        # All modules share the same conditioning embedding
+        first_module = next(iter(self.lllite_modules.values()))
+        with torch.no_grad() if not self.training else torch.enable_grad():
+            cond_emb = first_module.conditioning1(cond_image)
+
+        self.cond_emb = cond_emb
+
+        # Set conditioning embedding for all modules
+        for module in self.lllite_modules.values():
+            module.set_cond_emb(cond_emb)
 
     def to(self, *args, **kwargs):
         super().to(*args, **kwargs)
@@ -450,8 +504,9 @@ class ControlNetLLLiteNetwork(nn.Module):
         all_params = []
 
         # Ensure all parameters require gradients
-        for param in self.lllite_modules.parameters():
-            param.requires_grad_(True)
+        for module in self.lllite_modules.values():
+            for param in module.parameters():
+                param.requires_grad_(True)
 
         # All LLLite module parameters are trainable
         all_params.append({
@@ -473,9 +528,10 @@ class ControlNetLLLiteNetwork(nn.Module):
         return None
 
     def save_weights(self, path: str, dtype=None, metadata: dict = None, extra_state_dict: dict = None):
-        """Save ControlNet-LLLite weights"""
+        """Save ControlNet-LLLite weights (kohya-ss compatible format)"""
         state_dict = {}
 
+        # Save in kohya-ss format: module_name.submodule.weight
         for name, module in self.lllite_modules.items():
             for param_name, param in module.state_dict().items():
                 key = f"{name}.{param_name}"
@@ -526,11 +582,9 @@ class ControlNetLLLiteNetwork(nn.Module):
         return self.train(False)
 
     def enable_gradient_checkpointing(self):
-        """Enable gradient checkpointing for ControlNet-LLLite"""
-        # LLLite modules are relatively small, but we can enable it for the conditioning encoder
-        for module in self.lllite_modules.values():
-            if hasattr(module.conditioning_encoder, 'gradient_checkpointing'):
-                module.conditioning_encoder.gradient_checkpointing = True
+        """Enable gradient checkpointing"""
+        # LLLite modules are small, typically don't need gradient checkpointing
+        pass
 
     def __enter__(self):
         """Context manager entry"""
