@@ -138,34 +138,95 @@ class ControlNetNetwork(nn.Module):
         }
 
     def save_weights(self, path: str, dtype=None, metadata: dict = None, extra_state_dict: dict = None):
-        """Save ControlNet weights"""
-        state_dict = self.controlnet.state_dict()
+        """
+        Save ControlNet weights in compatible format
 
-        if dtype is not None:
-            state_dict = {k: v.to(dtype) for k, v in state_dict.items()}
-
-        # Add extra state dict (e.g., embeddings) if provided
-        if extra_state_dict is not None:
-            state_dict.update(extra_state_dict)
-
-        # Save as safetensors
+        Supports two formats:
+        1. Single file (.safetensors): Compatible with Diffusers from_single_file()
+        2. Diffusers folder: Standard diffusers format with config.json
+        """
         if path.endswith('.safetensors'):
+            # Save as single safetensors file (Diffusers compatible)
+            state_dict = self.controlnet.state_dict()
+
+            if dtype is not None:
+                state_dict = {k: v.to(dtype) for k, v in state_dict.items()}
+
+            # Add extra state dict (e.g., embeddings) if provided
+            if extra_state_dict is not None:
+                state_dict.update(extra_state_dict)
+
+            # Add metadata for compatibility
+            if metadata is None:
+                metadata = {}
+
+            # Save as safetensors with metadata
             save_file(state_dict, path, metadata=metadata)
+            print(f"[ControlNet] Saved weights to {path}")
         else:
-            # Save as diffusers format
+            # Save as diffusers format (folder with config.json + weights)
+            # Convert dtype before saving
+            if dtype is not None:
+                self.controlnet = self.controlnet.to(dtype)
+
             self.controlnet.save_pretrained(path)
+            print(f"[ControlNet] Saved weights to {path} (diffusers format)")
+
+            # Save extra state dict separately if provided
+            if extra_state_dict is not None:
+                extra_path = os.path.join(path, "extra_state_dict.safetensors")
+                save_file(extra_state_dict, extra_path)
 
     def load_weights(self, path: str):
-        """Load ControlNet weights"""
+        """
+        Load ControlNet weights from compatible format
+
+        Supports:
+        1. Single file (.safetensors or .pth)
+        2. Diffusers folder format
+        3. Hugging Face Hub model ID
+        """
+        extra_state_dict = {}
+
         if os.path.isfile(path):
-            # Load from safetensors
-            state_dict = load_file(path)
-            self.controlnet.load_state_dict(state_dict)
-        else:
-            # Load from diffusers format
+            # Load from single file (safetensors or pytorch)
+            print(f"[ControlNet] Loading weights from {path}")
+            if path.endswith('.safetensors'):
+                state_dict = load_file(path)
+            else:
+                state_dict = torch.load(path, map_location='cpu')
+
+            # Filter out extra state dict (embeddings, etc.)
+            controlnet_state_dict = {}
+            for key, value in state_dict.items():
+                if key.startswith('controlnet.') or 'conv' in key or 'down_block' in key or 'up_block' in key or 'mid_block' in key:
+                    controlnet_state_dict[key] = value
+                else:
+                    extra_state_dict[key] = value
+
+            # Load into controlnet
+            if controlnet_state_dict:
+                self.controlnet.load_state_dict(controlnet_state_dict, strict=False)
+            else:
+                # Try loading the entire state dict
+                self.controlnet.load_state_dict(state_dict, strict=False)
+
+        elif os.path.isdir(path):
+            # Load from diffusers format directory
+            print(f"[ControlNet] Loading weights from {path} (diffusers format)")
             self.controlnet = ControlNetModel.from_pretrained(path)
 
-        return {}
+            # Check for extra state dict
+            extra_path = os.path.join(path, "extra_state_dict.safetensors")
+            if os.path.exists(extra_path):
+                extra_state_dict = load_file(extra_path)
+
+        else:
+            # Try loading from Hugging Face Hub
+            print(f"[ControlNet] Loading weights from Hugging Face Hub: {path}")
+            self.controlnet = ControlNetModel.from_pretrained(path)
+
+        return extra_state_dict
 
     def train(self, mode: bool = True):
         """Set training mode"""
