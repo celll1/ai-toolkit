@@ -362,11 +362,22 @@ class BaseSDTrainProcess(BaseTrainProcess):
         # let adapter know we are sampling
         if self.adapter is not None and isinstance(self.adapter, CustomAdapter):
             self.adapter.is_sampling = True
-        
+
+        # Temporarily disable ControlNet/ControlNet-LLLite during sampling
+        network_was_active = False
+        if self.network is not None:
+            from toolkit.models.controlnet_train import ControlNetNetwork, ControlNetLLLiteNetwork
+            if isinstance(self.network, (ControlNetNetwork, ControlNetLLLiteNetwork)):
+                network_was_active = self.network.is_active
+                self.network.is_active = False
+
         # send to be generated
         self.sd.generate_images(gen_img_config_list, sampler=sample_config.sampler)
 
-        
+        # Re-enable network if it was active
+        if self.network is not None and network_was_active:
+            self.network.is_active = True
+
         if self.adapter is not None and isinstance(self.adapter, CustomAdapter):
             self.adapter.is_sampling = False
 
