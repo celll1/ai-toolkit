@@ -9,6 +9,7 @@ interface SampleData {
   sampleIndex: number;
   createdAt: string;
   size: number;
+  controlImagePath?: string; // Path to control image (for ControlNet)
 }
 
 interface SampleThumbnailCardProps {
@@ -58,6 +59,24 @@ const SampleThumbnailCard: React.FC<SampleThumbnailCardProps> = ({
     });
   };
 
+  // Get control image path from sample or config
+  const getControlImagePath = () => {
+    if (sample.controlImagePath) {
+      return sample.controlImagePath;
+    }
+
+    try {
+      const processConfig = jobConfig?.config?.process?.[0];
+      const sampleConfig = processConfig?.sample;
+      const specificSample = sampleConfig?.samples?.[sample.sampleIndex];
+      return specificSample?.ctrl_img || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const controlImagePath = getControlImagePath();
+
   return (
     <div 
       ref={cardRef}
@@ -95,7 +114,21 @@ const SampleThumbnailCard: React.FC<SampleThumbnailCardProps> = ({
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-400"></div>
             </div>
           )}
-          
+
+          {/* Control image overlay (bottom-right) */}
+          {controlImagePath && (
+            <div className="absolute bottom-0 right-0 w-1/3 h-1/3 border-2 border-blue-400/70 rounded-tl">
+              <img
+                src={`/api/img/${encodeURIComponent(controlImagePath)}`}
+                alt="Control"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute top-0 left-0 bg-blue-500/80 text-white text-[8px] px-1 py-0.5 font-semibold uppercase">
+                Control
+              </div>
+            </div>
+          )}
+
           {/* Overlay with sample info */}
           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
             <div className="text-xs text-white">

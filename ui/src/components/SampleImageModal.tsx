@@ -12,6 +12,7 @@ export interface SampleData {
   sampleIndex: number;
   createdAt: string;
   size: number;
+  controlImagePath?: string; // Path to control image (for ControlNet)
 }
 
 export interface SampleImageModalState {
@@ -67,16 +68,37 @@ export default function SampleImageModal() {
     }
   };
 
+  // Get the control image path for this sample
+  const getControlImagePath = () => {
+    if (!imageModal) return null;
+
+    // First check if it's provided directly in the sample data
+    if (imageModal.sample.controlImagePath) {
+      return imageModal.sample.controlImagePath;
+    }
+
+    // Otherwise try to get it from config
+    try {
+      const processConfig = imageModal.jobConfig?.config?.process?.[0];
+      const sampleConfig = processConfig?.sample;
+      const specificSample = sampleConfig?.samples?.[imageModal.sample.sampleIndex];
+
+      return specificSample?.ctrl_img || null;
+    } catch {
+      return null;
+    }
+  };
+
   // Get sample generation settings
   const getSampleSettings = () => {
     if (!imageModal) return {};
     try {
       const processConfig = imageModal.jobConfig?.config?.process?.[0];
       const sampleConfig = processConfig?.sample;
-      
+
       // Try to get specific sample settings first
       const specificSample = sampleConfig?.samples?.[imageModal.sample.sampleIndex];
-      
+
       return {
         width: sampleConfig?.width || 'N/A',
         height: sampleConfig?.height || 'N/A',
@@ -157,6 +179,7 @@ export default function SampleImageModal() {
 
   const prompt = getPromptForSample();
   const settings = getSampleSettings();
+  const controlImagePath = getControlImagePath();
   const currentIdx = imageModal.allSamples.findIndex(s => s.path === imageModal.sample.path);
 
   return (
@@ -196,37 +219,82 @@ export default function SampleImageModal() {
                 <button
                   onClick={handlePrevious}
                   disabled={currentIdx === 0}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-gray-800/80 rounded-full text-gray-300 hover:text-white hover:bg-gray-700/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-gray-800/80 rounded-full text-gray-300 hover:text-white hover:bg-gray-700/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed z-10"
                 >
                   <ChevronLeft className="w-6 h-6" />
                 </button>
-                
+
                 <button
                   onClick={handleNext}
                   disabled={currentIdx === imageModal.allSamples.length - 1}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-gray-800/80 rounded-full text-gray-300 hover:text-white hover:bg-gray-700/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-gray-800/80 rounded-full text-gray-300 hover:text-white hover:bg-gray-700/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed z-10"
                 >
                   <ChevronRight className="w-6 h-6" />
                 </button>
 
-                {/* Image */}
-                <div className="p-8">
-                  {isVideo(imageModal.sample.path) ? (
-                    <video
-                      src={`/api/img/${encodeURIComponent(imageModal.sample.path)}`}
-                      className="max-w-full max-h-[calc(100vh-300px)] object-contain"
-                      controls
-                      loop
-                      muted
-                      playsInline
-                    />
+                {/* Images Container */}
+                <div className="p-8 w-full h-full flex items-center justify-center">
+                  {controlImagePath ? (
+                    /* Show both control image and generated image side by side */
+                    <div className="flex gap-4 items-center justify-center max-w-full max-h-full">
+                      {/* Control Image */}
+                      <div className="flex-1 flex flex-col items-center gap-2">
+                        <div className="text-sm text-gray-400 font-medium">Control Image</div>
+                        <img
+                          src={`/api/img/${encodeURIComponent(controlImagePath)}`}
+                          alt="Control Image"
+                          className="max-w-full max-h-[calc(100vh-360px)] object-contain border-2 border-blue-500/30 rounded"
+                        />
+                      </div>
+
+                      {/* Arrow indicator */}
+                      <div className="text-gray-500">
+                        <ChevronRight className="w-8 h-8" />
+                      </div>
+
+                      {/* Generated Image */}
+                      <div className="flex-1 flex flex-col items-center gap-2">
+                        <div className="text-sm text-gray-400 font-medium">Generated Image</div>
+                        {isVideo(imageModal.sample.path) ? (
+                          <video
+                            src={`/api/img/${encodeURIComponent(imageModal.sample.path)}`}
+                            className="max-w-full max-h-[calc(100vh-360px)] object-contain border-2 border-green-500/30 rounded"
+                            controls
+                            loop
+                            muted
+                            playsInline
+                          />
+                        ) : (
+                          <img
+                            src={`/api/img/${encodeURIComponent(imageModal.sample.path)}`}
+                            alt={`Sample ${imageModal.sample.sampleIndex}`}
+                            className="max-w-full max-h-[calc(100vh-360px)] object-contain cursor-pointer border-2 border-green-500/30 rounded"
+                            onClick={onCancel}
+                          />
+                        )}
+                      </div>
+                    </div>
                   ) : (
-                    <img
-                      src={`/api/img/${encodeURIComponent(imageModal.sample.path)}`}
-                      alt={`Sample ${imageModal.sample.sampleIndex}`}
-                      className="max-w-full max-h-[calc(100vh-300px)] object-contain cursor-pointer"
-                      onClick={onCancel}
-                    />
+                    /* Show only generated image */
+                    <div>
+                      {isVideo(imageModal.sample.path) ? (
+                        <video
+                          src={`/api/img/${encodeURIComponent(imageModal.sample.path)}`}
+                          className="max-w-full max-h-[calc(100vh-300px)] object-contain"
+                          controls
+                          loop
+                          muted
+                          playsInline
+                        />
+                      ) : (
+                        <img
+                          src={`/api/img/${encodeURIComponent(imageModal.sample.path)}`}
+                          alt={`Sample ${imageModal.sample.sampleIndex}`}
+                          className="max-w-full max-h-[calc(100vh-300px)] object-contain cursor-pointer"
+                          onClick={onCancel}
+                        />
+                      )}
+                    </div>
                   )}
                 </div>
 
