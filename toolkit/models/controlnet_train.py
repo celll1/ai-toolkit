@@ -137,12 +137,16 @@ class ControlNetNetwork(nn.Module):
             'mid_block_res_sample': mid_block_res_sample,
         }
 
-    def save_weights(self, path: str, dtype=None, metadata: dict = None):
+    def save_weights(self, path: str, dtype=None, metadata: dict = None, extra_state_dict: dict = None):
         """Save ControlNet weights"""
         state_dict = self.controlnet.state_dict()
 
         if dtype is not None:
             state_dict = {k: v.to(dtype) for k, v in state_dict.items()}
+
+        # Add extra state dict (e.g., embeddings) if provided
+        if extra_state_dict is not None:
+            state_dict.update(extra_state_dict)
 
         # Save as safetensors
         if path.endswith('.safetensors'):
@@ -468,7 +472,7 @@ class ControlNetLLLiteNetwork(nn.Module):
         """
         return None
 
-    def save_weights(self, path: str, dtype=None, metadata: dict = None):
+    def save_weights(self, path: str, dtype=None, metadata: dict = None, extra_state_dict: dict = None):
         """Save ControlNet-LLLite weights"""
         state_dict = {}
 
@@ -479,6 +483,10 @@ class ControlNetLLLiteNetwork(nn.Module):
                     state_dict[key] = param.to(dtype)
                 else:
                     state_dict[key] = param
+
+        # Add extra state dict (e.g., embeddings) if provided
+        if extra_state_dict is not None:
+            state_dict.update(extra_state_dict)
 
         # Save as safetensors
         if path.endswith('.safetensors'):
