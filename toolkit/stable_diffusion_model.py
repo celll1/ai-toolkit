@@ -1395,6 +1395,23 @@ class StableDiffusion:
 
                     extra = {}
                     validation_image = None
+
+                    # Handle ControlNet/ControlNet-LLLite control images
+                    if network is not None:
+                        from toolkit.models.controlnet_train import ControlNetNetwork, ControlNetLLLiteNetwork
+                        if isinstance(network, ControlNetLLLiteNetwork):
+                            if gen_config.ctrl_img is not None:
+                                # Load and process control image for ControlNet-LLLite
+                                ctrl_image = Image.open(gen_config.ctrl_img).convert("RGB")
+                                ctrl_image = ctrl_image.resize((gen_config.width, gen_config.height))
+                                # Convert to tensor [1, 3, H, W]
+                                ctrl_tensor = transforms.ToTensor()(ctrl_image)
+                                ctrl_tensor = ctrl_tensor.unsqueeze(0).to(self.device_torch, dtype=self.torch_dtype)
+                                network.set_cond_image(ctrl_tensor)
+                            else:
+                                # No control image provided, set to None to disable
+                                network.set_cond_image(None)
+
                     if self.adapter is not None and gen_config.adapter_image_path is not None:
                         validation_image = Image.open(gen_config.adapter_image_path)
                         # if the name doesnt have .inpainting. in it, make sure it is rgb
