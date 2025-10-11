@@ -1396,21 +1396,34 @@ class StableDiffusion:
                     extra = {}
                     validation_image = None
 
-                    # Handle ControlNet/ControlNet-LLLite control images
-                    if network is not None:
+                    # Handle control images for different network types
+                    if gen_config.ctrl_img is not None:
                         from toolkit.models.controlnet_train import ControlNetNetwork, ControlNetLLLiteNetwork
-                        if isinstance(network, ControlNetLLLiteNetwork):
-                            if gen_config.ctrl_img is not None:
-                                # Load and process control image for ControlNet-LLLite
+                        is_controlnet_network = network is not None and isinstance(network, (ControlNetNetwork, ControlNetLLLiteNetwork))
+
+                        if is_controlnet_network:
+                            # ControlNet/LLLite: Use control image as conditioning
+                            if isinstance(network, ControlNetLLLiteNetwork):
                                 ctrl_image = Image.open(gen_config.ctrl_img).convert("RGB")
                                 ctrl_image = ctrl_image.resize((gen_config.width, gen_config.height))
-                                # Convert to tensor [1, 3, H, W]
                                 ctrl_tensor = transforms.ToTensor()(ctrl_image)
                                 ctrl_tensor = ctrl_tensor.unsqueeze(0).to(self.device_torch, dtype=self.torch_dtype)
                                 network.set_cond_image(ctrl_tensor)
-                            else:
-                                # No control image provided, set to None to disable
-                                network.set_cond_image(None)
+                        else:
+                            # LoRA/LoKR/full finetune: Use control image as starting latents (Image-to-Image)
+                            ctrl_image = Image.open(gen_config.ctrl_img).convert("RGB")
+                            ctrl_image = ctrl_image.resize((gen_config.width, gen_config.height))
+                            ctrl_tensor = transforms.ToTensor()(ctrl_image)
+                            ctrl_tensor = ctrl_tensor.unsqueeze(0).to(self.device_torch, dtype=self.torch_dtype)
+                            # Encode to latents
+                            ctrl_latents = self.encode_images(ctrl_tensor)
+                            # Set as initial latents for generation
+                            gen_config.latents = ctrl_latents
+                    elif network is not None:
+                        from toolkit.models.controlnet_train import ControlNetNetwork, ControlNetLLLiteNetwork
+                        if isinstance(network, ControlNetLLLiteNetwork):
+                            # No control image provided, set to None to disable
+                            network.set_cond_image(None)
 
                     if self.adapter is not None and gen_config.adapter_image_path is not None:
                         validation_image = Image.open(gen_config.adapter_image_path)

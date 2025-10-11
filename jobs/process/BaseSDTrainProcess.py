@@ -1341,8 +1341,24 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 if batch.unconditional_latents is not None:
                     batch.unconditional_latents = batch.unconditional_latents * self.train_config.latent_multiplier
 
+                # Check if we should use control image as starting latents for LoRA/LoKR/full finetune
+                # (not for ControlNet/LLLite which use control_tensor differently)
+                from toolkit.models.controlnet_train import ControlNetNetwork, ControlNetLLLiteNetwork
+                is_controlnet_training = isinstance(self.network, (ControlNetNetwork, ControlNetLLLiteNetwork))
 
-                noisy_latents = self.sd.add_noise(latents, noise, timesteps)
+                use_control_as_start = (batch.control_tensor is not None and
+                                       not is_controlnet_training)
+
+                if use_control_as_start:
+                    # Encode control images as starting latents (Image-to-Image approach)
+                    control_imgs = batch.control_tensor.to(self.device_torch, dtype=dtype)
+                    control_latents = self.sd.encode_images(control_imgs)
+                    control_latents = control_latents * latent_multiplier
+                    # Add noise to control latents instead of target latents
+                    noisy_latents = self.sd.add_noise(control_latents, noise, timesteps)
+                else:
+                    # Standard noise-from-random approach
+                    noisy_latents = self.sd.add_noise(latents, noise, timesteps)
 
                 # determine scaled noise
                 # todo do we need to scale this or does it always predict full intensity
