@@ -1263,11 +1263,33 @@ class ControlFileItemDTOMixin:
                 print_acc(f"Error loading image: {control_path}")
 
             if not self.full_size_control_images:
-                # we just scale them to 512x512:
-                w, h = img.size
-                img = img.resize((512, 512), Image.BICUBIC)
+                # For ControlNet/LLLite: scale to fixed 512x512
+                # For Image-to-Image (LoRA/finetune): must match target size
+                # Check if bucketing is enabled to determine which mode
+                if self.dataset_config.buckets and hasattr(self, 'crop_width') and hasattr(self, 'crop_height'):
+                    # Image-to-Image mode: match target image dimensions exactly
+                    w, h = img.size
+
+                    if self.flip_x:
+                        img = img.transpose(Image.FLIP_LEFT_RIGHT)
+                    if self.flip_y:
+                        img = img.transpose(Image.FLIP_TOP_BOTTOM)
+
+                    # Apply same resize and crop as target image
+                    img = img.resize((self.scale_to_width, self.scale_to_height), Image.BICUBIC)
+                    img = img.crop((
+                        self.crop_x,
+                        self.crop_y,
+                        self.crop_x + self.crop_width,
+                        self.crop_y + self.crop_height
+                    ))
+                else:
+                    # ControlNet/LLLite mode: fixed 512x512
+                    w, h = img.size
+                    img = img.resize((512, 512), Image.BICUBIC)
 
             else:
+                # full_size_control_images=True: always match target dimensions
                 w, h = img.size
                 if w > h and self.scale_to_width < self.scale_to_height:
                     # throw error, they should match
