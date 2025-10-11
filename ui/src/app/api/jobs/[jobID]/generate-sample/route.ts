@@ -25,17 +25,22 @@ export async function POST(request: NextRequest, { params }: { params: { jobID: 
     const outputDir = path.join(process.cwd(), 'output', job.name);
     const flagFile = path.join(outputDir, '.generate_sample_now');
 
+    console.log(`[On-Demand Sample] Creating flag file: ${flagFile}`);
+
     // Create output directory if it doesn't exist
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
+      console.log(`[On-Demand Sample] Created output directory: ${outputDir}`);
     }
 
     // Write flag file
     fs.writeFileSync(flagFile, Date.now().toString());
+    console.log(`[On-Demand Sample] Flag file created successfully`);
 
     return NextResponse.json({
       success: true,
-      message: 'Sample generation requested. It will be generated at the next training step.'
+      message: 'Sample generation requested. It will be generated at the next training step.',
+      debug: { flagFile, outputDir }  // Debug info
     });
   } catch (error) {
     console.error('Error requesting sample generation:', error);

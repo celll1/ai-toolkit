@@ -2288,9 +2288,9 @@ class BaseSDTrainProcess(BaseTrainProcess):
                         is_sample_step = True
                         try:
                             os.remove(flag_file)  # Remove flag file
-                            print_acc("[On-Demand] Generating sample at user request...")
-                        except:
-                            pass  # Ignore errors removing flag file
+                            print_acc(f"[On-Demand] Generating sample at user request (flag file: {flag_file})...")
+                        except Exception as e:
+                            print_acc(f"[On-Demand] Error removing flag file: {e}")
 
                     # Check for programmatic on-demand sample generation request
                     if self.should_generate_sample_now:
