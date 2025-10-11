@@ -281,16 +281,14 @@ export default function SimpleJob({
       return;
     }
 
-    // Check if we're in ControlNet mode
-    const isControlNet =
-      jobConfig.config.process[0].network?.type === 'controlnet' ||
-      jobConfig.config.process[0].network?.type === 'controlnet_lllite';
+    // Check if the selected dataset has control images (paired_files or control_path)
+    const hasControlImages = randomDataset.paired_files || randomDataset.control_path;
 
     try {
-      // Pass dataset config to API if in ControlNet mode
+      // Pass dataset config to API if dataset has control images
       const requestBody: any = { datasetName };
 
-      if (isControlNet) {
+      if (hasControlImages) {
         // Include dataset config for control image lookup
         requestBody.datasetConfig = {
           paired_files: randomDataset.paired_files,
@@ -309,7 +307,7 @@ export default function SimpleJob({
       // Create new sample with caption and control image if available
       const newSample: any = { prompt: caption };
 
-      if (isControlNet && controlImagePath) {
+      if (controlImagePath) {
         newSample.ctrl_img = controlImagePath;
         console.log('Added sample with control image:', controlImagePath);
       }
