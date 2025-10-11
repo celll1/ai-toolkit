@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import useSampleImages from '@/hooks/useSampleImages';
 import SampleThumbnailCard from './SampleThumbnailCard';
 import { Job } from '@prisma/client';
 import { JobConfig } from '@/types';
-import { Image as ImageIcon } from 'lucide-react';
+import { Image as ImageIcon, Sparkles } from 'lucide-react';
+import { apiClient } from '@/utils/api';
 
 interface SampleData {
   path: string;
@@ -20,6 +21,8 @@ interface SampleImagesProps {
 
 export default function SampleImages({ job }: SampleImagesProps) {
   const { sampleImages, status, refreshSampleImages } = useSampleImages(job.id, 5000);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generateMessage, setGenerateMessage] = useState('');
 
   const jobConfig = useMemo(() => {
     try {
@@ -29,6 +32,24 @@ export default function SampleImages({ job }: SampleImagesProps) {
       return null;
     }
   }, [job.job_config]);
+
+  const handleGenerateSample = async () => {
+    setIsGenerating(true);
+    setGenerateMessage('');
+    try {
+      const response = await apiClient.post(`/api/jobs/${job.id}/generate-sample`, {});
+      setGenerateMessage(response.data.message || 'Sample generation requested!');
+      // Refresh samples after a delay to catch the new sample
+      setTimeout(() => {
+        refreshSampleImages();
+      }, 2000);
+    } catch (error: any) {
+      console.error('Error requesting sample generation:', error);
+      setGenerateMessage(error.response?.data?.error || 'Failed to request sample generation');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   // Sort samples by creation date (newest first) and then by sample index
   const sortedSamples = useMemo(() => {
@@ -54,6 +75,38 @@ export default function SampleImages({ job }: SampleImagesProps) {
             ({sortedSamples.length} images)
           </span>
         </div>
+
+        {/* Generate Sample Button */}
+        {job.status === 'running' && (
+          <div className="flex items-center gap-3">
+            {generateMessage && (
+              <span className={`text-sm ${generateMessage.includes('Failed') || generateMessage.includes('Error') ? 'text-red-400' : 'text-green-400'}`}>
+                {generateMessage}
+              </span>
+            )}
+            <button
+              onClick={handleGenerateSample}
+              disabled={isGenerating}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                isGenerating
+                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                  : 'bg-purple-600 hover:bg-purple-700 text-white'
+              }`}
+            >
+              {isGenerating ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Requesting...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>Generate Sample Now</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Loading and error states */}

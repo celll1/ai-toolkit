@@ -102,6 +102,8 @@ class BaseSDTrainProcess(BaseTrainProcess):
         self.grad_accumulation_step = 1
         # if true, then we do not do an optimizer step. We are accumulating gradients
         self.is_grad_accumulation_step = False
+        # Flag for on-demand sample generation
+        self.should_generate_sample_now = False
         self.device = str(self.accelerator.device)
         self.device_torch = self.accelerator.device
         network_config = self.get_conf('network', None)
@@ -791,6 +793,13 @@ class BaseSDTrainProcess(BaseTrainProcess):
     
     def hook_after_sd_init_before_load(self):
         pass
+
+    def request_sample_generation(self):
+        """Request on-demand sample generation at next available step"""
+        if self.should_generate_sample_now:
+            return False  # Already pending
+        self.should_generate_sample_now = True
+        return True
 
     def get_latest_save_path(self, name=None, post=''):
         if name == None:
@@ -2272,6 +2281,22 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     is_sample_step = self.sample_config.sample_every and self.step_num % self.sample_config.sample_every == 0
                     if self.train_config.disable_sampling:
                         is_sample_step = False
+
+                    # Check for on-demand sample generation request (file-based flag)
+                    flag_file = os.path.join(self.save_root, '.generate_sample_now')
+                    if os.path.exists(flag_file):
+                        is_sample_step = True
+                        try:
+                            os.remove(flag_file)  # Remove flag file
+                            print_acc("[On-Demand] Generating sample at user request...")
+                        except:
+                            pass  # Ignore errors removing flag file
+
+                    # Check for programmatic on-demand sample generation request
+                    if self.should_generate_sample_now:
+                        is_sample_step = True
+                        self.should_generate_sample_now = False  # Reset flag
+                        print_acc("[On-Demand] Generating sample at programmatic request...")
 
                     batch_list = []
 
