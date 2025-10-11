@@ -21,8 +21,22 @@ export async function POST(request: NextRequest, { params }: { params: { jobID: 
       return NextResponse.json({ error: 'Job is not running' }, { status: 400 });
     }
 
+    // Parse job config to get training_folder
+    let jobConfig: any = {};
+    try {
+      jobConfig = JSON.parse(job.job_config);
+    } catch (error) {
+      console.error('Error parsing job config:', error);
+    }
+
+    // Get training folder from config, or default to 'output'
+    const trainingFolder = jobConfig.config?.process?.[0]?.training_folder || 'output';
+
     // Create a flag file to signal the training process
-    const outputDir = path.join(process.cwd(), 'output', job.name);
+    // Use absolute path if training_folder is absolute, otherwise join with cwd
+    const outputDir = path.isAbsolute(trainingFolder)
+      ? path.join(trainingFolder, job.name)
+      : path.join(process.cwd(), trainingFolder, job.name);
     const flagFile = path.join(outputDir, '.generate_sample_now');
 
     console.log(`[On-Demand Sample] Creating flag file: ${flagFile}`);
