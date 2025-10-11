@@ -1229,12 +1229,10 @@ export default function SimpleJob({
                           })()}
                         </div>
                       )}
-                      {modelArch?.additionalSections?.includes('datasets.control_path') &&
-                        (jobConfig.config.process[0].network?.type === 'controlnet' ||
-                          jobConfig.config.process[0].network?.type === 'controlnet_lllite') && (
+                      {modelArch?.additionalSections?.includes('datasets.control_path') && (
                           <>
                             <SelectInput
-                              label="Control Dataset"
+                              label="Control Dataset (Optional - for Image-to-Image training)"
                               docKey="datasets.control_path"
                               value={dataset.control_path ?? ''}
                               className="pt-2"
@@ -1825,9 +1823,7 @@ export default function SimpleJob({
                         />
                       </div>
 
-                      {(modelArch?.additionalSections?.includes('sample.ctrl_img') ||
-                        jobConfig.config.process[0].network?.type === 'controlnet' ||
-                        jobConfig.config.process[0].network?.type === 'controlnet_lllite') && (
+                      {modelArch?.additionalSections?.includes('sample.ctrl_img') && (
                           <div
                             className="h-14 w-14 mt-2 ml-4 border border-gray-500 flex items-center justify-center rounded cursor-pointer hover:bg-gray-700 transition-colors"
                             style={{
@@ -1847,7 +1843,7 @@ export default function SimpleJob({
                             }}
                           >
                             {!sample.ctrl_img && (
-                              <div className="text-gray-400 text-xs text-center font-bold">Add Control Image</div>
+                              <div className="text-gray-400 text-xs text-center font-bold">Add Control Image (Optional)</div>
                             )}
                           </div>
                         )}
