@@ -42,6 +42,7 @@ export const modelArchs: ModelArch[] = [
       'config.process[0].train.noise_scheduler': ['flowmatch', 'flowmatch'],
     },
     disableSections: ['network.conv'],
+    additionalSections: ['datasets.control_path', 'sample.ctrl_img'],
   },
   {
     name: 'flux_kontext',
@@ -73,6 +74,7 @@ export const modelArchs: ModelArch[] = [
       'config.process[0].train.noise_scheduler': ['flowmatch', 'flowmatch'],
     },
     disableSections: ['network.conv'],
+    additionalSections: ['datasets.control_path', 'sample.ctrl_img'],
   },
   {
     name: 'flex2',
@@ -101,6 +103,7 @@ export const modelArchs: ModelArch[] = [
       'config.process[0].train.noise_scheduler': ['flowmatch', 'flowmatch'],
     },
     disableSections: ['network.conv'],
+    additionalSections: ['datasets.control_path', 'sample.ctrl_img'],
   },
   {
     name: 'chroma',
@@ -115,6 +118,7 @@ export const modelArchs: ModelArch[] = [
       'config.process[0].train.noise_scheduler': ['flowmatch', 'flowmatch'],
     },
     disableSections: ['network.conv'],
+    additionalSections: ['datasets.control_path', 'sample.ctrl_img'],
   },
   {
     name: 'wan21:1b',
@@ -282,6 +286,7 @@ export const modelArchs: ModelArch[] = [
       'config.process[0].train.noise_scheduler': ['flowmatch', 'flowmatch'],
     },
     disableSections: ['network.conv'],
+    additionalSections: ['datasets.control_path', 'sample.ctrl_img'],
   },
   {
     name: 'qwen_image',
@@ -300,7 +305,7 @@ export const modelArchs: ModelArch[] = [
       'config.process[0].model.qtype': ['qfloat8', 'qfloat8'],
     },
     disableSections: ['network.conv'],
-    additionalSections: ['model.low_vram'],
+    additionalSections: ['datasets.control_path', 'sample.ctrl_img', 'model.low_vram'],
     accuracyRecoveryAdapters: {
       '3 bit with ARA': 'uint3|ostris/accuracy_recovery_adapters/qwen_image_torchao_uint3.safetensors',
     },
@@ -321,7 +326,7 @@ export const modelArchs: ModelArch[] = [
       'config.process[0].network.network_kwargs.ignore_if_contains': [['ff_i.experts', 'ff_i.gate'], []],
     },
     disableSections: ['network.conv'],
-    additionalSections: ['model.low_vram'],
+    additionalSections: ['datasets.control_path', 'sample.ctrl_img', 'model.low_vram'],
   },
   {
     name: 'hidream_e1',
@@ -356,7 +361,7 @@ export const modelArchs: ModelArch[] = [
       'config.process[0].sample.guidance_scale': [6, 4],
     },
     disableSections: ['model.quantize', 'train.timestep_type'],
-    additionalSections: ['datasets.control_path'],
+    additionalSections: ['datasets.control_path', 'sample.ctrl_img'],
   },
   {
     name: 'sd15',
@@ -373,7 +378,7 @@ export const modelArchs: ModelArch[] = [
       'config.process[0].sample.guidance_scale': [6, 4],
     },
     disableSections: ['model.quantize', 'train.timestep_type'],
-    additionalSections: ['datasets.control_path'],
+    additionalSections: ['datasets.control_path', 'sample.ctrl_img'],
   },
   {
     name: 'omnigen2',
