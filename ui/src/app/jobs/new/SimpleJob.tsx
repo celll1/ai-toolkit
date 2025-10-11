@@ -659,6 +659,20 @@ export default function SimpleJob({
                   min={1}
                   max={16}
                 />
+                <div className="mt-4 mb-2 text-sm font-semibold text-gray-300">
+                  Text Encoder LoRA (Optional - when train_text_encoder is enabled)
+                </div>
+                <NumberInput
+                  label="TE LoRA Rank (linear_dim)"
+                  value={jobConfig.config.process[0].network.linear}
+                  onChange={value => {
+                    setJobConfig(value, 'config.process[0].network.linear');
+                    setJobConfig(value, 'config.process[0].network.linear_alpha');
+                  }}
+                  placeholder="eg. 16"
+                  min={0}
+                  max={1024}
+                />
               </>
             )}
             {jobConfig.config.process[0].network?.type == 'controlnet_lllite' && (
@@ -686,6 +700,20 @@ export default function SimpleJob({
                   placeholder="eg. 768"
                   min={256}
                   max={2048}
+                />
+                <div className="mt-4 mb-2 text-sm font-semibold text-gray-300">
+                  Text Encoder LoRA (Optional - when train_text_encoder is enabled)
+                </div>
+                <NumberInput
+                  label="TE LoRA Rank (linear_dim)"
+                  value={jobConfig.config.process[0].network.linear}
+                  onChange={value => {
+                    setJobConfig(value, 'config.process[0].network.linear');
+                    setJobConfig(value, 'config.process[0].network.linear_alpha');
+                  }}
+                  placeholder="eg. 16"
+                  min={0}
+                  max={1024}
                 />
               </>
             )}

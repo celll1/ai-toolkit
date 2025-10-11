@@ -1812,6 +1812,9 @@ class BaseSDTrainProcess(BaseTrainProcess):
                             unet=self.sd.unet,
                             controlnet_conditioning_channel=self.network_config.controlnet_conditioning_channels,
                             conditioning_embedding_out_channels=self.network_config.controlnet_conditioning_embedding_out_channels,
+                            text_encoder=text_encoder,  # For optional TE LoRA
+                            train_text_encoder=self.train_config.train_text_encoder,
+                            network_config=self.network_config,  # Pass config for LoRA settings
                             **network_kwargs
                         )
                     else:  # is_controlnet_lllite
@@ -1821,6 +1824,9 @@ class BaseSDTrainProcess(BaseTrainProcess):
                             depth=self.network_config.lllite_depth,
                             hidden_dim=self.network_config.lllite_hidden_dim,
                             cond_emb_dim=self.network_config.lllite_cond_emb_dim,
+                            text_encoder=text_encoder,  # For optional TE LoRA
+                            train_text_encoder=self.train_config.train_text_encoder,
+                            network_config=self.network_config,  # Pass config for LoRA settings
                             **network_kwargs
                         )
                 else:
@@ -1930,8 +1936,11 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     else:
                         # ControlNet and ControlNet-LLLite have simpler parameter setup
                         print_acc("Preparing ControlNet/LLLite optimizer parameters...")
+                        # Pass text encoder LR if training text encoder
+                        te_lr = self.train_config.text_encoder_lr if hasattr(self.train_config, 'text_encoder_lr') and self.train_config.text_encoder_lr else self.train_config.lr
                         params_net = self.network.prepare_optimizer_params(
-                            learning_rate=self.train_config.lr
+                            learning_rate=self.train_config.lr,
+                            te_learning_rate=te_lr if self.train_config.train_text_encoder else None
                         )
                         params += params_net
                         print_acc(f"Added {len(params_net)} parameter groups from ControlNet/LLLite")

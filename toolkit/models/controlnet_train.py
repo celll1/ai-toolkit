@@ -27,6 +27,9 @@ class ControlNetNetwork(nn.Module):
         unet: UNet2DConditionModel,
         controlnet_conditioning_channel: int = 3,
         conditioning_embedding_out_channels: Optional[List[int]] = None,
+        text_encoder=None,  # For optional TE LoRA
+        train_text_encoder: bool = False,  # Enable TE LoRA
+        network_config: 'NetworkConfig' = None,  # For LoRA settings
         **kwargs
     ):
         super().__init__()
@@ -35,6 +38,10 @@ class ControlNetNetwork(nn.Module):
         self.multiplier = 1.0
         self.can_merge_in = False  # ControlNet cannot be merged into UNet
         self.is_merged_in = False  # Track merge state
+
+        # Text Encoder LoRA support
+        self.te_lora_network = None
+        self.train_text_encoder = train_text_encoder
 
         # Create ControlNet model based on UNet architecture
         if conditioning_embedding_out_channels is None:
@@ -49,6 +56,10 @@ class ControlNetNetwork(nn.Module):
         # Initialize with proper weights (zero convolutions start at zero)
         self._initialize_weights()
 
+        # Create Text Encoder LoRA if requested
+        if train_text_encoder and text_encoder is not None and network_config is not None:
+            self._create_te_lora(text_encoder, network_config)
+
         self.device = None
         self.dtype = None
 
@@ -61,9 +72,36 @@ class ControlNetNetwork(nn.Module):
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
 
+    def _create_te_lora(self, text_encoder, network_config: 'NetworkConfig'):
+        """Create Text Encoder LoRA network"""
+        from toolkit.lora_special import LoRASpecialNetwork
+
+        print(f"[ControlNet] Creating Text Encoder LoRA (rank={network_config.linear_dim}, alpha={network_config.linear_alpha})")
+
+        # Determine model type
+        is_sdxl = isinstance(text_encoder, list) and len(text_encoder) == 2
+
+        self.te_lora_network = LoRASpecialNetwork(
+            text_encoder=text_encoder,
+            unet=None,  # Don't train UNet via LoRA
+            multiplier=1.0,
+            lora_dim=network_config.linear_dim,
+            alpha=network_config.linear_alpha,
+            dropout=network_config.dropout,
+            train_text_encoder=True,
+            train_unet=False,
+            is_sdxl=is_sdxl,
+            use_text_encoder_1=True,
+            use_text_encoder_2=True if is_sdxl else False,
+        )
+
+        print(f"[ControlNet] Text Encoder LoRA created with {len(list(self.te_lora_network.parameters()))} parameters")
+
     def to(self, *args, **kwargs):
         super().to(*args, **kwargs)
         self.controlnet = self.controlnet.to(*args, **kwargs)
+        if self.te_lora_network is not None:
+            self.te_lora_network.to(*args, **kwargs)
         # Track device and dtype
         if len(args) > 0:
             if isinstance(args[0], torch.device):
@@ -76,8 +114,8 @@ class ControlNetNetwork(nn.Module):
             self.dtype = kwargs['dtype']
         return self
 
-    def prepare_optimizer_params(self, learning_rate: float):
-        """Prepare parameters for optimizer"""
+    def prepare_optimizer_params(self, learning_rate: float, te_learning_rate: float = None):
+        """Prepare parameters for optimizer (ControlNet + optional TE LoRA)"""
         all_params = []
 
         # Ensure all parameters require gradients
@@ -89,6 +127,13 @@ class ControlNetNetwork(nn.Module):
             'params': list(self.controlnet.parameters()),
             'lr': learning_rate
         })
+
+        # Add Text Encoder LoRA parameters if available
+        if self.te_lora_network is not None:
+            te_lr = te_learning_rate if te_learning_rate is not None else learning_rate
+            te_params = self.te_lora_network.prepare_optimizer_params(te_lr)
+            all_params.extend(te_params)
+            print(f"[ControlNet] Added Text Encoder LoRA parameters with lr={te_lr}")
 
         return all_params
 
@@ -144,6 +189,8 @@ class ControlNetNetwork(nn.Module):
         Supports two formats:
         1. Single file (.safetensors): Compatible with Diffusers from_single_file()
         2. Diffusers folder: Standard diffusers format with config.json
+
+        If TE LoRA is enabled, saves separately as {path}_lora_te.safetensors
         """
         if path.endswith('.safetensors'):
             # Save as single safetensors file (Diffusers compatible)
@@ -163,6 +210,13 @@ class ControlNetNetwork(nn.Module):
             # Save as safetensors with metadata
             save_file(state_dict, path, metadata=metadata)
             print(f"[ControlNet] Saved weights to {path}")
+
+            # Save Text Encoder LoRA separately if available
+            if self.te_lora_network is not None:
+                te_lora_path = path.replace('.safetensors', '_lora_te.safetensors')
+                self.te_lora_network.save_weights(te_lora_path, dtype=dtype, metadata=metadata)
+                print(f"[ControlNet] Saved Text Encoder LoRA to {te_lora_path}")
+
         else:
             # Save as diffusers format (folder with config.json + weights)
             # Convert dtype before saving
@@ -176,6 +230,12 @@ class ControlNetNetwork(nn.Module):
             if extra_state_dict is not None:
                 extra_path = os.path.join(path, "extra_state_dict.safetensors")
                 save_file(extra_state_dict, extra_path)
+
+            # Save Text Encoder LoRA separately if available
+            if self.te_lora_network is not None:
+                te_lora_path = path.rstrip('/') + '_lora_te.safetensors'
+                self.te_lora_network.save_weights(te_lora_path, dtype=dtype, metadata=metadata)
+                print(f"[ControlNet] Saved Text Encoder LoRA to {te_lora_path}")
 
     def load_weights(self, path: str):
         """
@@ -232,6 +292,8 @@ class ControlNetNetwork(nn.Module):
         """Set training mode"""
         super().train(mode)
         self.controlnet.train(mode)
+        if self.te_lora_network is not None:
+            self.te_lora_network.train(mode)
         return self
 
     def eval(self):
@@ -423,6 +485,9 @@ class ControlNetLLLiteNetwork(nn.Module):
         depth: int = 2,
         dropout: float = 0.0,
         multiplier: float = 1.0,
+        text_encoder=None,  # For optional TE LoRA
+        train_text_encoder: bool = False,  # Enable TE LoRA
+        network_config: 'NetworkConfig' = None,  # For LoRA settings
         **kwargs
     ):
         super().__init__()
@@ -433,6 +498,10 @@ class ControlNetLLLiteNetwork(nn.Module):
         self.is_merged_in = False
         self.cond_emb_dim = cond_emb_dim
         self.depth = depth
+
+        # Text Encoder LoRA support
+        self.te_lora_network = None
+        self.train_text_encoder = train_text_encoder
 
         self.unet = unet
         self.lllite_modules = nn.ModuleDict()
@@ -481,10 +550,39 @@ class ControlNetLLLiteNetwork(nn.Module):
         self._original_forwards = {}
         self._inject_hooks()
 
+        # Create Text Encoder LoRA if requested
+        if train_text_encoder and text_encoder is not None and network_config is not None:
+            self._create_te_lora(text_encoder, network_config)
+
         self.device = None
         self.dtype = None
         self.cond_image = None
         self.cond_emb = None
+
+    def _create_te_lora(self, text_encoder, network_config: 'NetworkConfig'):
+        """Create Text Encoder LoRA network"""
+        from toolkit.lora_special import LoRASpecialNetwork
+
+        print(f"[ControlNet-LLLite] Creating Text Encoder LoRA (rank={network_config.linear_dim}, alpha={network_config.linear_alpha})")
+
+        # Determine model type
+        is_sdxl = isinstance(text_encoder, list) and len(text_encoder) == 2
+
+        self.te_lora_network = LoRASpecialNetwork(
+            text_encoder=text_encoder,
+            unet=None,  # Don't train UNet via LoRA
+            multiplier=1.0,
+            lora_dim=network_config.linear_dim,
+            alpha=network_config.linear_alpha,
+            dropout=network_config.dropout,
+            train_text_encoder=True,
+            train_unet=False,
+            is_sdxl=is_sdxl,
+            use_text_encoder_1=True,
+            use_text_encoder_2=True if is_sdxl else False,
+        )
+
+        print(f"[ControlNet-LLLite] Text Encoder LoRA created with {len(list(self.te_lora_network.parameters()))} parameters")
 
     def _inject_hooks(self):
         """Inject forward hooks into target modules"""
@@ -549,6 +647,8 @@ class ControlNetLLLiteNetwork(nn.Module):
         super().to(*args, **kwargs)
         for module in self.lllite_modules.values():
             module.to(*args, **kwargs)
+        if self.te_lora_network is not None:
+            self.te_lora_network.to(*args, **kwargs)
         if len(args) > 0:
             if isinstance(args[0], torch.device):
                 self.device = args[0]
@@ -560,8 +660,8 @@ class ControlNetLLLiteNetwork(nn.Module):
             self.dtype = kwargs['dtype']
         return self
 
-    def prepare_optimizer_params(self, learning_rate: float):
-        """Prepare parameters for optimizer"""
+    def prepare_optimizer_params(self, learning_rate: float, te_learning_rate: float = None):
+        """Prepare parameters for optimizer (LLLite + optional TE LoRA)"""
         all_params = []
 
         # Ensure all parameters require gradients
@@ -574,6 +674,13 @@ class ControlNetLLLiteNetwork(nn.Module):
             'params': list(self.lllite_modules.parameters()),
             'lr': learning_rate
         })
+
+        # Add Text Encoder LoRA parameters if available
+        if self.te_lora_network is not None:
+            te_lr = te_learning_rate if te_learning_rate is not None else learning_rate
+            te_params = self.te_lora_network.prepare_optimizer_params(te_lr)
+            all_params.extend(te_params)
+            print(f"[ControlNet-LLLite] Added Text Encoder LoRA parameters with lr={te_lr}")
 
         return all_params
 
@@ -589,7 +696,10 @@ class ControlNetLLLiteNetwork(nn.Module):
         return None
 
     def save_weights(self, path: str, dtype=None, metadata: dict = None, extra_state_dict: dict = None):
-        """Save ControlNet-LLLite weights (kohya-ss compatible format)"""
+        """Save ControlNet-LLLite weights (kohya-ss compatible format)
+
+        If TE LoRA is enabled, saves separately as {path}_lora_te.safetensors
+        """
         state_dict = {}
 
         # Save in kohya-ss format: module_name.submodule.weight
@@ -610,6 +720,12 @@ class ControlNetLLLiteNetwork(nn.Module):
             save_file(state_dict, path, metadata=metadata)
         else:
             torch.save(state_dict, path)
+
+        # Save Text Encoder LoRA separately if available
+        if self.te_lora_network is not None:
+            te_lora_path = path.replace('.safetensors', '_lora_te.safetensors')
+            self.te_lora_network.save_weights(te_lora_path, dtype=dtype, metadata=metadata)
+            print(f"[ControlNet-LLLite] Saved Text Encoder LoRA to {te_lora_path}")
 
     def load_weights(self, path: str):
         """Load ControlNet-LLLite weights"""
@@ -636,6 +752,8 @@ class ControlNetLLLiteNetwork(nn.Module):
         super().train(mode)
         for module in self.lllite_modules.values():
             module.train(mode)
+        if self.te_lora_network is not None:
+            self.te_lora_network.train(mode)
         return self
 
     def eval(self):
