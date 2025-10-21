@@ -1417,6 +1417,24 @@ class StableDiffusion:
                             ctrl_tensor = ctrl_tensor.unsqueeze(0).to(self.device_torch, dtype=self.torch_dtype)
                             # Encode to latents
                             ctrl_latents = self.encode_images(ctrl_tensor)
+
+                            # Add noise based on denoising_strength
+                            # denoising_strength: 1.0 = full denoise (max noise), 0.0 = no denoise (no noise)
+                            if gen_config.denoising_strength < 1.0:
+                                # Calculate timestep based on denoising strength
+                                # Higher strength = start from higher noise level
+                                timestep = int(gen_config.num_inference_steps * gen_config.denoising_strength)
+
+                                # Get noise scheduler
+                                noise_scheduler = self.noise_scheduler
+
+                                # Generate random noise
+                                noise = torch.randn_like(ctrl_latents)
+
+                                # Add noise to control latents: noisy_A_t = sqrt(alpha_t) * A + sqrt(1-alpha_t) * noise
+                                timesteps = torch.tensor([timestep], device=self.device_torch)
+                                ctrl_latents = noise_scheduler.add_noise(ctrl_latents, noise, timesteps)
+
                             # Set as initial latents for generation
                             gen_config.latents = ctrl_latents
                     elif network is not None:

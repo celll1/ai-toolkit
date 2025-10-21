@@ -57,6 +57,7 @@ class SampleItem:
         self.ctrl_img: Optional[str] = kwargs.get('ctrl_img', None)
         self.ctrl_idx: int = kwargs.get('ctrl_idx', 0)
         self.network_multiplier: float = kwargs.get('network_multiplier', sample_config.network_multiplier)
+        self.denoising_strength: float = kwargs.get('denoising_strength', sample_config.denoising_strength if hasattr(sample_config, 'denoising_strength') else 1.0)
         
 
 class SampleConfig:
@@ -79,6 +80,7 @@ class SampleConfig:
         self.extra_values = kwargs.get('extra_values', [])
         self.num_frames = kwargs.get('num_frames', 1)
         self.fps: int = kwargs.get('fps', 16)
+        self.denoising_strength: float = kwargs.get('denoising_strength', 1.0)  # 1.0 = full denoise, 0.0 = no denoise
         if self.num_frames > 1 and self.ext not in ['webp']:
             print("Changing sample extention to animated webp")
             self.ext = 'webp'
@@ -1091,13 +1093,15 @@ class GenerateImageConfig:
             ctrl_img: Optional[str] = None,  # control image for controlnet
             num_frames: int = 1,
             fps: int = 15,
-            ctrl_idx: int = 0
+            ctrl_idx: int = 0,
+            denoising_strength: float = 1.0  # for img2img: 1.0 = full denoise, 0.0 = no denoise
     ):
         self.width: int = width
         self.height: int = height
         self.num_inference_steps: int = num_inference_steps
         self.guidance_scale: float = guidance_scale
         self.guidance_rescale: float = guidance_rescale
+        self.denoising_strength: float = denoising_strength
         self.prompt: str = prompt
         self.prompt_2: str = prompt_2
         self.negative_prompt: str = negative_prompt

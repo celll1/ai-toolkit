@@ -1723,6 +1723,16 @@ export default function SimpleJob({
                   min={1}
                   required
                 />
+                <NumberInput
+                  label="Denoising Strength"
+                  value={jobConfig.config.process[0].sample.denoising_strength ?? 1.0}
+                  onChange={value => setJobConfig(value, 'config.process[0].sample.denoising_strength')}
+                  placeholder="eg. 1.0"
+                  className="pt-2"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                />
               </div>
               <div>
                 <NumberInput
