@@ -1360,11 +1360,19 @@ class BaseSDTrainProcess(BaseTrainProcess):
 
                 if use_control_as_start:
                     # Encode control images as starting latents (Image-to-Image approach)
+                    # Use control image A as "noise" and learn trajectory A→B
                     control_imgs = batch.control_tensor.to(self.device_torch, dtype=dtype)
                     control_latents = self.sd.encode_images(control_imgs)
                     control_latents = control_latents * latent_multiplier
-                    # Add noise to control latents instead of target latents
-                    noisy_latents = self.sd.add_noise(control_latents, noise, timesteps)
+
+                    # Instead of: noisy_B_t = sqrt(alpha_t) * B + sqrt(1-alpha_t) * random_noise
+                    # We use:     noisy_B_t = sqrt(alpha_t) * B + sqrt(1-alpha_t) * A
+                    # This makes the model learn the trajectory from A to B
+                    noisy_latents = self.sd.add_noise(latents, control_latents, timesteps)
+
+                    # Update noise to be control_latents for loss calculation
+                    # The model should predict control_latents (A) from noisy_latents
+                    noise = control_latents
                 else:
                     # Standard noise-from-random approach
                     noisy_latents = self.sd.add_noise(latents, noise, timesteps)
