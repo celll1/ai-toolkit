@@ -167,6 +167,8 @@ class DataLoaderBatchDTO:
                 DataLoaderBatchDTO._control_debug_printed = True
                 print(f"[DEBUG DataLoaderBatchDTO] has_control={has_control}")
                 print(f"[DEBUG DataLoaderBatchDTO] file_items control_tensors: {[x.control_tensor is not None for x in self.file_items]}")
+                print(f"[DEBUG DataLoaderBatchDTO] file_items has_control_image: {[x.has_control_image for x in self.file_items]}")
+                print(f"[DEBUG DataLoaderBatchDTO] file_items control_path: {[x.control_path for x in self.file_items]}")
             if has_control:
                 # find one to use as a base
                 base_control_tensor = None

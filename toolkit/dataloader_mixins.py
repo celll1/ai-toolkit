@@ -1242,12 +1242,11 @@ class ControlFileItemDTOMixin:
                 self.control_path = self.control_path[0]
 
     def load_control_image(self: 'FileItemDTO'):
-        # if not hasattr(ControlFileItemDTOMixin, '_load_debug_printed'):
-        #     ControlFileItemDTOMixin._load_debug_printed = True
-        #     print(f"[DEBUG] load_control_image called for: {self.path}")
-        #     print(f"[DEBUG] control_path: {self.control_path}")
-        #     print(f"[DEBUG] has_control_image: {self.has_control_image}")
-        pass
+        if not hasattr(ControlFileItemDTOMixin, '_load_debug_printed'):
+            ControlFileItemDTOMixin._load_debug_printed = True
+            print(f"[DEBUG load_control_image] called for: {self.path}")
+            print(f"[DEBUG load_control_image] control_path: {self.control_path}")
+            print(f"[DEBUG load_control_image] has_control_image: {self.has_control_image}")
 
         control_tensors = []
         control_path_list = self.control_path
