@@ -699,6 +699,15 @@ def get_dataloader_from_datasets(
     # todo and evenly distribute reg images
 
     def dto_collation(batch: List['FileItemDTO']):
+        # Debug: check file items before batch creation
+        if not hasattr(dto_collation, '_debug_printed'):
+            dto_collation._debug_printed = True
+            print(f"[DEBUG dto_collation] batch size: {len(batch)}")
+            for idx, item in enumerate(batch):
+                print(f"[DEBUG dto_collation] item[{idx}].path: {item.path}")
+                print(f"[DEBUG dto_collation] item[{idx}].has_control_image: {item.has_control_image}")
+                print(f"[DEBUG dto_collation] item[{idx}].control_path: {item.control_path}")
+
         # create DTO batch
         batch = DataLoaderBatchDTO(
             file_items=batch
