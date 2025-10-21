@@ -1190,13 +1190,18 @@ class ControlFileItemDTOMixin:
         self.full_size_control_images = False
         img_path = kwargs.get('path', None)
 
-        # Debug: log the first few files
-        if not hasattr(ControlFileItemDTOMixin, '_debug_printed'):
-            ControlFileItemDTOMixin._debug_printed = True
-            print(f"[DEBUG ControlFileItemDTOMixin] paired_files={dataset_config.paired_files if dataset_config else 'NO CONFIG'}")
-            print(f"[DEBUG ControlFileItemDTOMixin] source_suffix={dataset_config.source_suffix if dataset_config and hasattr(dataset_config, 'source_suffix') else 'N/A'}")
-            print(f"[DEBUG ControlFileItemDTOMixin] target_suffix={dataset_config.target_suffix if dataset_config and hasattr(dataset_config, 'target_suffix') else 'N/A'}")
-            print(f"[DEBUG ControlFileItemDTOMixin] img_path={img_path}")
+        # Debug: log the first few files per dataset
+        dataset_path = dataset_config.folder_path if dataset_config else 'UNKNOWN'
+        if not hasattr(ControlFileItemDTOMixin, '_debug_datasets'):
+            ControlFileItemDTOMixin._debug_datasets = set()
+
+        if dataset_path not in ControlFileItemDTOMixin._debug_datasets:
+            ControlFileItemDTOMixin._debug_datasets.add(dataset_path)
+            print(f"[DEBUG ControlFileItemDTOMixin] Dataset: {dataset_path}")
+            print(f"[DEBUG ControlFileItemDTOMixin]   paired_files={dataset_config.paired_files if dataset_config else 'NO CONFIG'}")
+            print(f"[DEBUG ControlFileItemDTOMixin]   source_suffix={dataset_config.source_suffix if dataset_config and hasattr(dataset_config, 'source_suffix') else 'N/A'}")
+            print(f"[DEBUG ControlFileItemDTOMixin]   target_suffix={dataset_config.target_suffix if dataset_config and hasattr(dataset_config, 'target_suffix') else 'N/A'}")
+            print(f"[DEBUG ControlFileItemDTOMixin]   img_path example={img_path}")
 
         # Handle paired files mode
         if dataset_config.paired_files:
@@ -1212,12 +1217,18 @@ class ControlFileItemDTOMixin:
                     if os.path.exists(source_path):
                         self.control_path = source_path
                         self.has_control_image = True
-                        # print(f"[DEBUG] Found control image: {source_path}")
+                        if not hasattr(ControlFileItemDTOMixin, '_found_control_printed'):
+                            ControlFileItemDTOMixin._found_control_printed = True
+                            print(f"[DEBUG ControlFileItemDTOMixin] Found control image: {source_path}")
                         break
-                # if not self.has_control_image:
-                #     print(f"[DEBUG] Control image NOT found for {img_path}, searched: {source_file_name}")
-            # else:
-            #     print(f"[DEBUG] Target suffix '{dataset_config.target_suffix}' not in filename: {file_name_no_ext}")
+                if not self.has_control_image:
+                    if not hasattr(ControlFileItemDTOMixin, '_not_found_control_printed'):
+                        ControlFileItemDTOMixin._not_found_control_printed = True
+                        print(f"[DEBUG ControlFileItemDTOMixin] Control image NOT found for {img_path}, searched: {source_file_name}")
+            else:
+                if not hasattr(ControlFileItemDTOMixin, '_suffix_mismatch_printed'):
+                    ControlFileItemDTOMixin._suffix_mismatch_printed = True
+                    print(f"[DEBUG ControlFileItemDTOMixin] Target suffix '{dataset_config.target_suffix}' not in filename: {file_name_no_ext}")
         elif dataset_config.control_path is not None:
             # Original behavior: find the control image path in a separate directory
             control_path_list = dataset_config.control_path
