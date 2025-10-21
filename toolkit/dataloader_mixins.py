@@ -1194,14 +1194,20 @@ class ControlFileItemDTOMixin:
         dataset_path = dataset_config.folder_path if dataset_config else 'UNKNOWN'
         if not hasattr(ControlFileItemDTOMixin, '_debug_datasets'):
             ControlFileItemDTOMixin._debug_datasets = set()
+            ControlFileItemDTOMixin._control_stats = {}
 
         if dataset_path not in ControlFileItemDTOMixin._debug_datasets:
             ControlFileItemDTOMixin._debug_datasets.add(dataset_path)
+            ControlFileItemDTOMixin._control_stats[dataset_path] = {'found': 0, 'not_found': 0, 'total': 0}
             print(f"[DEBUG ControlFileItemDTOMixin] Dataset: {dataset_path}")
             print(f"[DEBUG ControlFileItemDTOMixin]   paired_files={dataset_config.paired_files if dataset_config else 'NO CONFIG'}")
             print(f"[DEBUG ControlFileItemDTOMixin]   source_suffix={dataset_config.source_suffix if dataset_config and hasattr(dataset_config, 'source_suffix') else 'N/A'}")
             print(f"[DEBUG ControlFileItemDTOMixin]   target_suffix={dataset_config.target_suffix if dataset_config and hasattr(dataset_config, 'target_suffix') else 'N/A'}")
             print(f"[DEBUG ControlFileItemDTOMixin]   img_path example={img_path}")
+
+        # Track statistics
+        if dataset_path in ControlFileItemDTOMixin._control_stats:
+            ControlFileItemDTOMixin._control_stats[dataset_path]['total'] += 1
 
         # Handle paired files mode
         if dataset_config.paired_files:
@@ -1217,11 +1223,15 @@ class ControlFileItemDTOMixin:
                     if os.path.exists(source_path):
                         self.control_path = source_path
                         self.has_control_image = True
+                        if dataset_path in ControlFileItemDTOMixin._control_stats:
+                            ControlFileItemDTOMixin._control_stats[dataset_path]['found'] += 1
                         if not hasattr(ControlFileItemDTOMixin, '_found_control_printed'):
                             ControlFileItemDTOMixin._found_control_printed = True
                             print(f"[DEBUG ControlFileItemDTOMixin] Found control image: {source_path}")
                         break
                 if not self.has_control_image:
+                    if dataset_path in ControlFileItemDTOMixin._control_stats:
+                        ControlFileItemDTOMixin._control_stats[dataset_path]['not_found'] += 1
                     if not hasattr(ControlFileItemDTOMixin, '_not_found_control_printed'):
                         ControlFileItemDTOMixin._not_found_control_printed = True
                         print(f"[DEBUG ControlFileItemDTOMixin] Control image NOT found for {img_path}, searched: {source_file_name}")

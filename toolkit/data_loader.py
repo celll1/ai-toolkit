@@ -745,6 +745,19 @@ def get_dataloader_from_datasets(
             collate_fn=dto_collation,
             **dataloader_kwargs
         )
+
+    # Print control image statistics
+    from toolkit.dataloader_mixins import ControlFileItemDTOMixin
+    if hasattr(ControlFileItemDTOMixin, '_control_stats'):
+        print("\n[DEBUG] Control Image Statistics:")
+        for dataset_path, stats in ControlFileItemDTOMixin._control_stats.items():
+            if stats['total'] > 0:
+                print(f"  Dataset: {dataset_path}")
+                print(f"    Total files processed: {stats['total']}")
+                print(f"    Control images found: {stats['found']}")
+                print(f"    Control images not found: {stats['not_found']}")
+                print(f"    Success rate: {stats['found']/stats['total']*100:.1f}%")
+
     return data_loader
 
 
