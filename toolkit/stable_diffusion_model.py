@@ -1430,25 +1430,35 @@ class StableDiffusion:
                             # Encode to latents
                             ctrl_latents = self.encode_images(ctrl_tensor)
 
-                            # Add noise based on denoising_strength
+                            # For img2img: add noise and prepare custom timesteps
                             # denoising_strength: 1.0 = full denoise (max noise), 0.0 = no denoise (no noise)
-                            if gen_config.denoising_strength < 1.0:
-                                # Calculate timestep based on denoising strength
-                                # Higher strength = start from higher noise level
-                                timestep = int(gen_config.num_inference_steps * gen_config.denoising_strength)
 
-                                # Get noise scheduler
-                                noise_scheduler = self.noise_scheduler
+                            # Get noise scheduler
+                            noise_scheduler = self.noise_scheduler
 
-                                # Generate random noise
-                                noise = torch.randn_like(ctrl_latents)
+                            # Calculate how many timesteps to skip based on strength
+                            # strength 1.0 = start from beginning (timestep index 0)
+                            # strength 0.0 = start from end (skip all timesteps)
+                            init_timestep = int(gen_config.num_inference_steps * (1 - gen_config.denoising_strength))
+                            init_timestep = max(0, min(init_timestep, gen_config.num_inference_steps - 1))
 
-                                # Add noise to control latents: noisy_A_t = sqrt(alpha_t) * A + sqrt(1-alpha_t) * noise
-                                timesteps = torch.tensor([timestep], device=self.device_torch)
-                                ctrl_latents = noise_scheduler.add_noise(ctrl_latents, noise, timesteps)
+                            # Get the actual timestep value from scheduler
+                            t_start = init_timestep
+                            timesteps = noise_scheduler.timesteps[t_start:]
+
+                            # Get the timestep to add noise to
+                            timestep_to_add_noise = timesteps[0:1]
+
+                            # Generate random noise
+                            noise = torch.randn_like(ctrl_latents, generator=generator)
+
+                            # Add noise to control latents: noisy_A_t = sqrt(alpha_t) * A + sqrt(1-alpha_t) * noise
+                            ctrl_latents = noise_scheduler.add_noise(ctrl_latents, noise, timestep_to_add_noise)
 
                             # Set as initial latents for generation
                             gen_config.latents = ctrl_latents
+                            # Store custom timesteps to use in pipeline call
+                            gen_config.custom_timesteps = timesteps
                     elif network is not None:
                         from toolkit.models.controlnet_train import ControlNetNetwork, ControlNetLLLiteNetwork
                         if isinstance(network, ControlNetLLLiteNetwork):
@@ -1599,6 +1609,10 @@ class StableDiffusion:
                         extra['output_type'] = 'latent'
                         if not self.is_xl:
                             raise ValueError("Refiner is only supported for XL models")
+
+                    # Add custom timesteps for img2img with control images
+                    if hasattr(gen_config, 'custom_timesteps') and gen_config.custom_timesteps is not None:
+                        extra['timesteps'] = gen_config.custom_timesteps
 
                     conditional_embeds = conditional_embeds.to(self.device_torch, dtype=self.unet.dtype)
                     unconditional_embeds = unconditional_embeds.to(self.device_torch, dtype=self.unet.dtype)

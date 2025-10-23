@@ -1102,6 +1102,7 @@ class GenerateImageConfig:
         self.guidance_scale: float = guidance_scale
         self.guidance_rescale: float = guidance_rescale
         self.denoising_strength: float = denoising_strength
+        self.custom_timesteps: Union[torch.Tensor | None] = None  # will be set when using img2img with control images
         self.prompt: str = prompt
         self.prompt_2: str = prompt_2
         self.negative_prompt: str = negative_prompt
