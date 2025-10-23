@@ -1449,10 +1449,13 @@ class StableDiffusion:
                             # Get the timestep to add noise to
                             timestep_to_add_noise = timesteps[0:1]
 
-                            # Generate random noise (use randn instead of randn_like for generator support)
+                            # Set seed for reproducible noise (same as what will be used for main generation)
+                            torch.manual_seed(gen_config.seed)
+                            torch.cuda.manual_seed(gen_config.seed)
+
+                            # Generate random noise
                             noise = torch.randn(
                                 ctrl_latents.shape,
-                                generator=generator,
                                 device=ctrl_latents.device,
                                 dtype=ctrl_latents.dtype
                             )
