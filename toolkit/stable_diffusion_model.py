@@ -1449,8 +1449,13 @@ class StableDiffusion:
                             # Get the timestep to add noise to
                             timestep_to_add_noise = timesteps[0:1]
 
-                            # Generate random noise
-                            noise = torch.randn_like(ctrl_latents, generator=generator)
+                            # Generate random noise (use randn instead of randn_like for generator support)
+                            noise = torch.randn(
+                                ctrl_latents.shape,
+                                generator=generator,
+                                device=ctrl_latents.device,
+                                dtype=ctrl_latents.dtype
+                            )
 
                             # Add noise to control latents: noisy_A_t = sqrt(alpha_t) * A + sqrt(1-alpha_t) * noise
                             ctrl_latents = noise_scheduler.add_noise(ctrl_latents, noise, timestep_to_add_noise)
