@@ -1465,8 +1465,8 @@ class StableDiffusion:
 
                             # Set as initial latents for generation
                             gen_config.latents = ctrl_latents
-                            # Store custom timesteps to use in pipeline call
-                            gen_config.custom_timesteps = timesteps
+                            # Store custom timesteps to use in pipeline call (must be on CPU for numpy conversion)
+                            gen_config.custom_timesteps = timesteps.cpu()
                     elif network is not None:
                         from toolkit.models.controlnet_train import ControlNetNetwork, ControlNetLLLiteNetwork
                         if isinstance(network, ControlNetLLLiteNetwork):
