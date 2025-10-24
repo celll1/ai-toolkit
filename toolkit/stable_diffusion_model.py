@@ -1436,20 +1436,40 @@ class StableDiffusion:
                             # Get noise scheduler
                             noise_scheduler = self.noise_scheduler
 
-                            # Calculate how many timesteps to skip based on strength
-                            # strength 1.0 = start from beginning (timestep index 0)
-                            # strength 0.0 = start from end (skip all timesteps)
-                            init_timestep = int(gen_config.num_inference_steps * (1 - gen_config.denoising_strength))
-                            init_timestep = max(0, min(init_timestep, gen_config.num_inference_steps - 1))
+                            # Calculate timestep index based on strength
+                            # img2img logic: strength determines how much noise to add
+                            # strength 1.0 = add full noise (start from first timestep, index 0)
+                            # strength 0.5 = add medium noise (start from middle)
+                            # strength 0.0 = add no noise (start from last timestep, skip denoising)
 
-                            # Get the actual timestep value from scheduler
-                            t_start = init_timestep
+                            # The scheduler timesteps go from high to low (e.g., [999, 979, ..., 19, 0])
+                            # We want to start denoising from a certain point based on strength
+                            num_inference_steps = gen_config.num_inference_steps
+
+                            # Calculate which timestep to start from
+                            # strength=1.0: t_start=0 (start from beginning, full noise)
+                            # strength=0.5: t_start=12 (start from middle, medium noise)
+                            # strength=0.0: t_start=24 (start from end, minimal noise)
+                            t_start = int(num_inference_steps * (1.0 - gen_config.denoising_strength))
+                            t_start = min(t_start, num_inference_steps - 1)
+
+                            # Get timesteps for denoising (from t_start to end)
                             timesteps = noise_scheduler.timesteps[t_start:]
 
-                            # Get the timestep to add noise to
-                            timestep_to_add_noise = timesteps[0:1]
+                            # DEBUG: Print timestep information
+                            print(f"[DEBUG img2img] denoising_strength={gen_config.denoising_strength}")
+                            print(f"[DEBUG img2img] num_inference_steps={num_inference_steps}")
+                            print(f"[DEBUG img2img] t_start={t_start}")
+                            print(f"[DEBUG img2img] Total timesteps in scheduler: {len(noise_scheduler.timesteps)}")
+                            print(f"[DEBUG img2img] Full timesteps: {noise_scheduler.timesteps}")
+                            print(f"[DEBUG img2img] Selected timesteps: {timesteps}")
+                            print(f"[DEBUG img2img] Will add noise at timestep: {timesteps[0]}")
 
-                            # Set seed for reproducible noise (same as what will be used for main generation)
+                            # The noise level should match the FIRST timestep we'll denoise from
+                            # This is timesteps[0], which is the starting point
+                            init_noise_timestep = timesteps[0:1]
+
+                            # Set seed for reproducible noise
                             torch.manual_seed(gen_config.seed)
                             torch.cuda.manual_seed(gen_config.seed)
 
@@ -1460,8 +1480,10 @@ class StableDiffusion:
                                 dtype=ctrl_latents.dtype
                             )
 
-                            # Add noise to control latents: noisy_A_t = sqrt(alpha_t) * A + sqrt(1-alpha_t) * noise
-                            ctrl_latents = noise_scheduler.add_noise(ctrl_latents, noise, timestep_to_add_noise)
+                            # Add noise to control latents matching the initial timestep
+                            # For DDPM scheduler: timesteps go from high (999) to low (0)
+                            # Higher timestep = more noise
+                            ctrl_latents = noise_scheduler.add_noise(ctrl_latents, noise, init_noise_timestep)
 
                             # Set as initial latents for generation
                             gen_config.latents = ctrl_latents
@@ -1621,6 +1643,23 @@ class StableDiffusion:
                     # Add custom timesteps for img2img with control images
                     if hasattr(gen_config, 'custom_timesteps') and gen_config.custom_timesteps is not None:
                         extra['timesteps'] = gen_config.custom_timesteps
+
+                    # Add callback for debugging denoising steps
+                    if hasattr(gen_config, 'custom_timesteps') and gen_config.custom_timesteps is not None:
+                        from tqdm import tqdm
+                        pbar = tqdm(total=len(gen_config.custom_timesteps), desc="Denoising", leave=False)
+
+                        def denoising_callback(pipe, step_index, timestep, callback_kwargs):
+                            # Get alpha_t from scheduler
+                            scheduler = pipe.scheduler
+                            alpha_prod_t = scheduler.alphas_cumprod[timestep]
+
+                            print(f"[Denoising] step={step_index}/{len(gen_config.custom_timesteps)-1}, "
+                                  f"timestep={timestep}, alpha_t={alpha_prod_t:.4f}")
+                            pbar.update(1)
+                            return callback_kwargs
+
+                        extra['callback_on_step_end'] = denoising_callback
 
                     conditional_embeds = conditional_embeds.to(self.device_torch, dtype=self.unet.dtype)
                     unconditional_embeds = unconditional_embeds.to(self.device_torch, dtype=self.unet.dtype)
