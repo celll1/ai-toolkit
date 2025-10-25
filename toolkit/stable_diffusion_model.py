@@ -1436,16 +1436,19 @@ class StableDiffusion:
                             # Get noise scheduler
                             noise_scheduler = self.noise_scheduler
 
+                            # IMPORTANT: Set the correct number of timesteps first
+                            # This must be done before accessing noise_scheduler.timesteps
+                            num_inference_steps = gen_config.num_inference_steps
+                            noise_scheduler.set_timesteps(num_inference_steps, device=self.device_torch)
+
                             # Calculate timestep index based on strength
                             # img2img logic: strength determines how much noise to add
                             # strength 1.0 = add full noise (start from first timestep, index 0)
                             # strength 0.5 = add medium noise (start from middle)
                             # strength 0.0 = add no noise (start from last timestep, skip denoising)
 
-                            # The scheduler timesteps go from high to low (e.g., [999, 979, ..., 19, 0])
+                            # The scheduler timesteps go from high to low (e.g., [999, 979, ..., 19, 0] for 25 steps)
                             # We want to start denoising from a certain point based on strength
-                            num_inference_steps = gen_config.num_inference_steps
-
                             # Calculate which timestep to start from
                             # strength=1.0: t_start=0 (start from beginning, full noise)
                             # strength=0.5: t_start=12 (start from middle, medium noise)
