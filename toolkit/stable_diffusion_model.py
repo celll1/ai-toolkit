@@ -1404,7 +1404,14 @@ class StableDiffusion:
                         if is_controlnet_network:
                             # ControlNet/LLLite: Use control image as conditioning (txt2img + controlnet)
                             ctrl_image = Image.open(gen_config.ctrl_img).convert("RGB")
-                            ctrl_image = ctrl_image.resize((gen_config.width, gen_config.height))
+
+                            # Use control image size (adjusted to multiples of 8) instead of config size
+                            orig_width, orig_height = ctrl_image.size
+                            ctrl_width = (orig_width // 8) * 8
+                            ctrl_height = (orig_height // 8) * 8
+                            ctrl_image = ctrl_image.resize((ctrl_width, ctrl_height))
+                            gen_config.width = ctrl_width
+                            gen_config.height = ctrl_height
 
                             if isinstance(network, ControlNetLLLiteNetwork):
                                 # ControlNet-LLLite: Set condition image via hook
