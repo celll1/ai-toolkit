@@ -1402,13 +1402,20 @@ class StableDiffusion:
                         is_controlnet_network = network is not None and isinstance(network, (ControlNetNetwork, ControlNetLLLiteNetwork))
 
                         if is_controlnet_network:
-                            # ControlNet/LLLite: Use control image as conditioning
+                            # ControlNet/LLLite: Use control image as conditioning (txt2img + controlnet)
+                            ctrl_image = Image.open(gen_config.ctrl_img).convert("RGB")
+                            ctrl_image = ctrl_image.resize((gen_config.width, gen_config.height))
+
                             if isinstance(network, ControlNetLLLiteNetwork):
-                                ctrl_image = Image.open(gen_config.ctrl_img).convert("RGB")
-                                ctrl_image = ctrl_image.resize((gen_config.width, gen_config.height))
+                                # ControlNet-LLLite: Set condition image via hook
                                 ctrl_tensor = transforms.ToTensor()(ctrl_image)
                                 ctrl_tensor = ctrl_tensor.unsqueeze(0).to(self.device_torch, dtype=self.torch_dtype)
                                 network.set_cond_image(ctrl_tensor)
+                            elif isinstance(network, ControlNetNetwork):
+                                # Standard ControlNet: Pass control image to pipeline
+                                # Store control image for pipeline
+                                extra['image'] = ctrl_image  # PIL Image for ControlNet pipeline
+                                extra['controlnet_conditioning_scale'] = gen_config.controlnet_conditioning_scale
                         else:
                             # LoRA/LoKR/full finetune: Use control image as starting latents (Image-to-Image)
                             ctrl_image = Image.open(gen_config.ctrl_img).convert("RGB")

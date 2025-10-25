@@ -58,6 +58,7 @@ class SampleItem:
         self.ctrl_idx: int = kwargs.get('ctrl_idx', 0)
         self.network_multiplier: float = kwargs.get('network_multiplier', sample_config.network_multiplier)
         self.denoising_strength: float = kwargs.get('denoising_strength', sample_config.denoising_strength if hasattr(sample_config, 'denoising_strength') else 1.0)
+        self.controlnet_conditioning_scale: float = kwargs.get('controlnet_conditioning_scale', sample_config.controlnet_conditioning_scale if hasattr(sample_config, 'controlnet_conditioning_scale') else 1.0)
         
 
 class SampleConfig:
@@ -81,6 +82,7 @@ class SampleConfig:
         self.num_frames = kwargs.get('num_frames', 1)
         self.fps: int = kwargs.get('fps', 16)
         self.denoising_strength: float = kwargs.get('denoising_strength', 1.0)  # 1.0 = full denoise, 0.0 = no denoise
+        self.controlnet_conditioning_scale: float = kwargs.get('controlnet_conditioning_scale', 1.0)  # ControlNet strength during sampling
         if self.num_frames > 1 and self.ext not in ['webp']:
             print("Changing sample extention to animated webp")
             self.ext = 'webp'
@@ -1094,7 +1096,8 @@ class GenerateImageConfig:
             num_frames: int = 1,
             fps: int = 15,
             ctrl_idx: int = 0,
-            denoising_strength: float = 1.0  # for img2img: 1.0 = full denoise, 0.0 = no denoise
+            denoising_strength: float = 1.0,  # for img2img: 1.0 = full denoise, 0.0 = no denoise
+            controlnet_conditioning_scale: float = 1.0  # ControlNet conditioning strength
     ):
         self.width: int = width
         self.height: int = height
@@ -1102,6 +1105,7 @@ class GenerateImageConfig:
         self.guidance_scale: float = guidance_scale
         self.guidance_rescale: float = guidance_rescale
         self.denoising_strength: float = denoising_strength
+        self.controlnet_conditioning_scale: float = controlnet_conditioning_scale
         self.custom_timesteps: Union[torch.Tensor | None] = None  # will be set when using img2img with control images
         self.prompt: str = prompt
         self.prompt_2: str = prompt_2

@@ -1733,6 +1733,16 @@ export default function SimpleJob({
                   max={1}
                   step={0.01}
                 />
+                <NumberInput
+                  label="ControlNet Conditioning Scale"
+                  value={jobConfig.config.process[0].sample.controlnet_conditioning_scale ?? 1.0}
+                  onChange={value => setJobConfig(value, 'config.process[0].sample.controlnet_conditioning_scale')}
+                  placeholder="eg. 1.0"
+                  className="pt-2"
+                  min={0}
+                  max={2}
+                  step={0.05}
+                />
               </div>
               <div>
                 <NumberInput

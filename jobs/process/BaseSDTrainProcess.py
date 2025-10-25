@@ -352,6 +352,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 ctrl_img=sample_item.ctrl_img,
                 ctrl_idx=sample_item.ctrl_idx,
                 denoising_strength=sample_item.denoising_strength,
+                controlnet_conditioning_scale=sample_item.controlnet_conditioning_scale,
                 **extra_args
             ))
 
