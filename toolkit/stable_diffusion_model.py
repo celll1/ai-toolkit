@@ -1646,7 +1646,6 @@ class StableDiffusion:
 
                     # Add callback for debugging denoising steps
                     if hasattr(gen_config, 'custom_timesteps') and gen_config.custom_timesteps is not None:
-                        from tqdm import tqdm
                         pbar = tqdm(total=len(gen_config.custom_timesteps), desc="Denoising", leave=False)
 
                         def denoising_callback(pipe, step_index, timestep, callback_kwargs):
