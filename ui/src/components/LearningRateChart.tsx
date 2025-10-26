@@ -1,6 +1,6 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 interface TensorboardEvent {
   step: number;
@@ -13,12 +13,46 @@ interface LearningRateChartProps {
   isLoading?: boolean;
 }
 
+// Downsample data to reduce rendering load
+const downsampleData = <T extends { step: number }>(data: T[], maxPoints: number = 1000): T[] => {
+  if (data.length <= maxPoints) return data;
+
+  const interval = Math.ceil(data.length / maxPoints);
+  const downsampled: T[] = [];
+
+  for (let i = 0; i < data.length; i += interval) {
+    downsampled.push(data[i]);
+  }
+
+  // Always include the last point
+  if (downsampled[downsampled.length - 1] !== data[data.length - 1]) {
+    downsampled.push(data[data.length - 1]);
+  }
+
+  return downsampled;
+};
+
 export default function LearningRateChart({ data, isLoading = false }: LearningRateChartProps) {
-  // Memoize chart data to prevent unnecessary re-renders
-  const chartData = useMemo(() => data.map(point => ({
-    step: point.step,
-    lr: point.value
-  })), [data]);
+  const [rangeMode, setRangeMode] = useState<'all' | 'recent'>('all');
+  const [maxPoints, setMaxPoints] = useState(1000);
+
+  // Filter data based on range mode
+  const filteredData = useMemo(() => {
+    if (rangeMode === 'recent' && data.length > 0) {
+      const recentCount = Math.min(1000, data.length);
+      return data.slice(-recentCount);
+    }
+    return data;
+  }, [data, rangeMode]);
+
+  // Downsample and memoize chart data
+  const chartData = useMemo(() => {
+    const downsampled = downsampleData(filteredData, maxPoints);
+    return downsampled.map(point => ({
+      step: point.step,
+      lr: point.value
+    }));
+  }, [filteredData, maxPoints]);
 
   // Helper function to calculate nice ticks
   const calculateNiceTicks = (dataMin: number, dataMax: number, maxTicks: number = 5): number[] => {
@@ -75,14 +109,42 @@ export default function LearningRateChart({ data, isLoading = false }: LearningR
 
   return (
     <div className="bg-gray-900 rounded-xl shadow-lg border border-gray-800 p-4">
-      <div className="flex items-center mb-3">
-        <TrendingUp className="w-5 h-5 mr-2 text-blue-400" />
-        <h3 className="text-gray-100 font-medium">Learning Rate</h3>
-        {isLoading && (
-          <div className="ml-auto">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
-          </div>
-        )}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center">
+          <TrendingUp className="w-5 h-5 mr-2 text-blue-400" />
+          <h3 className="text-gray-100 font-medium">Learning Rate</h3>
+          {isLoading && (
+            <div className="ml-3">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 text-xs">
+          <button
+            onClick={() => setRangeMode('all')}
+            className={`px-2 py-1 rounded ${
+              rangeMode === 'all'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            All
+          </button>
+          <button
+            onClick={() => setRangeMode('recent')}
+            className={`px-2 py-1 rounded ${
+              rangeMode === 'recent'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            Recent
+          </button>
+          <span className="text-gray-400 ml-1">
+            ({chartData.length} pts)
+          </span>
+        </div>
       </div>
 
       <div className="h-64">
