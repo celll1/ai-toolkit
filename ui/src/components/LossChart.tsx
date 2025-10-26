@@ -33,9 +33,29 @@ const downsampleData = <T extends { step: number }>(data: T[], maxPoints: number
   return downsampled;
 };
 
+// Calculate smoothed data using exponential moving average
+const calculateSmoothing = (data: TensorboardEvent[], smoothingFactor: number): TensorboardEvent[] => {
+  if (data.length === 0) return [];
+
+  const smoothed: TensorboardEvent[] = [];
+  let lastSmoothed = data[0].value;
+
+  for (const point of data) {
+    lastSmoothed = lastSmoothed * smoothingFactor + point.value * (1 - smoothingFactor);
+    smoothed.push({
+      step: point.step,
+      value: lastSmoothed,
+      wall_time: point.wall_time
+    });
+  }
+
+  return smoothed;
+};
+
 export default function LossChart({ data, smoothData, isLoading = false }: LossChartProps) {
   const [rangeMode, setRangeMode] = useState<'all' | 'recent'>('all');
   const [maxPoints, setMaxPoints] = useState(1000);
+  const [smoothingFactor, setSmoothingFactor] = useState(0.9); // 0-1, higher = smoother
 
   // Filter data based on range mode
   const filteredData = useMemo(() => {
@@ -46,26 +66,22 @@ export default function LossChart({ data, smoothData, isLoading = false }: LossC
     return data;
   }, [data, rangeMode]);
 
-  const filteredSmoothData = useMemo(() => {
-    if (!smoothData) return undefined;
-    if (rangeMode === 'recent' && smoothData.length > 0) {
-      const recentCount = Math.min(1000, smoothData.length);
-      return smoothData.slice(-recentCount);
-    }
-    return smoothData;
-  }, [smoothData, rangeMode]);
+  // Calculate client-side smoothing with user-adjustable factor
+  const clientSmoothData = useMemo(() => {
+    return calculateSmoothing(filteredData, smoothingFactor);
+  }, [filteredData, smoothingFactor]);
 
   // Downsample and combine raw and smooth data into single dataset (memoized)
   const chartData = useMemo(() => {
     const downsampled = downsampleData(filteredData, maxPoints);
-    const smoothDownsampled = filteredSmoothData ? downsampleData(filteredSmoothData, maxPoints) : undefined;
+    const smoothDownsampled = downsampleData(clientSmoothData, maxPoints);
 
     return downsampled.map((point, index) => ({
       step: point.step,
       loss: point.value,
       smoothLoss: smoothDownsampled?.[index]?.value
     }));
-  }, [filteredData, filteredSmoothData, maxPoints]);
+  }, [filteredData, clientSmoothData, maxPoints]);
 
   // Helper function to calculate nice ticks
   const calculateNiceTicks = (dataMin: number, dataMax: number, maxTicks: number = 5): number[] => {
@@ -139,7 +155,7 @@ export default function LossChart({ data, smoothData, isLoading = false }: LossC
           )}
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex items-center gap-3 text-xs">
           <button
             onClick={() => setRangeMode('all')}
             className={`px-2 py-1 rounded ${
@@ -160,10 +176,32 @@ export default function LossChart({ data, smoothData, isLoading = false }: LossC
           >
             Recent
           </button>
-          <span className="text-gray-400 ml-1">
+          <span className="text-gray-400">
             ({chartData.length} pts)
           </span>
         </div>
+      </div>
+
+      {/* Smoothing slider */}
+      <div className="flex items-center gap-3 mb-3">
+        <label className="text-xs text-gray-400 whitespace-nowrap">
+          Smoothing:
+        </label>
+        <input
+          type="range"
+          min="0"
+          max="0.99"
+          step="0.01"
+          value={smoothingFactor}
+          onChange={(e) => setSmoothingFactor(parseFloat(e.target.value))}
+          className="flex-1 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
+          style={{
+            background: `linear-gradient(to right, #3B82F6 0%, #3B82F6 ${smoothingFactor * 100}%, #374151 ${smoothingFactor * 100}%, #374151 100%)`
+          }}
+        />
+        <span className="text-xs text-gray-400 w-10 text-right">
+          {smoothingFactor.toFixed(2)}
+        </span>
       </div>
       
       <div className="h-64">
@@ -216,17 +254,15 @@ export default function LossChart({ data, smoothData, isLoading = false }: LossC
                 opacity={0.6}
                 isAnimationActive={false}
               />
-              {smoothData && smoothData.length > 0 && (
-                <Line
-                  type="monotone"
-                  dataKey="smoothLoss"
-                  stroke="#FCA5A5"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 3, fill: '#FCA5A5' }}
-                  isAnimationActive={false}
-                />
-              )}
+              <Line
+                type="monotone"
+                dataKey="smoothLoss"
+                stroke="#FCA5A5"
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 3, fill: '#FCA5A5' }}
+                isAnimationActive={false}
+              />
             </LineChart>
           </ResponsiveContainer>
         ) : (
