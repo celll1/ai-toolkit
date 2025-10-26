@@ -1232,6 +1232,14 @@ class StableDiffusion:
                 Pipe = StableDiffusionPipeline
 
             extra_args = {}
+
+            # Check if we have a ControlNet in network (for training)
+            controlnet_for_pipeline = None
+            if network is not None:
+                from toolkit.models.controlnet_train import ControlNetNetwork
+                if isinstance(network, ControlNetNetwork):
+                    controlnet_for_pipeline = network.controlnet
+
             if self.adapter is not None:
                 if isinstance(self.adapter, T2IAdapter):
                     if self.is_xl:
@@ -1251,6 +1259,13 @@ class StableDiffusion:
                 else:
                     if self.is_xl:
                         extra_args['add_watermarker'] = False
+            elif controlnet_for_pipeline is not None:
+                # ControlNet training: use network's controlnet for pipeline
+                if self.is_xl:
+                    Pipe = StableDiffusionXLControlNetPipeline
+                else:
+                    Pipe = StableDiffusionControlNetPipeline
+                extra_args['controlnet'] = controlnet_for_pipeline
 
             # TODO add clip skip
             if self.is_xl:
