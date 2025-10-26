@@ -175,6 +175,7 @@ class ControlNetNetwork(nn.Module):
             controlnet_cond=controlnet_cond,
             conditioning_scale=conditioning_scale * multiplier_value,
             return_dict=False,
+            **kwargs
         )
 
         return {

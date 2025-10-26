@@ -1517,12 +1517,19 @@ class SDTrainer(BaseSDTrainProcess):
                         # ControlNet needs control images
                         if has_adapter_img:
                             with torch.set_grad_enabled(True):
+                                # Build added_cond_kwargs for SDXL
+                                added_cond_kwargs = {}
+                                if self.sd.is_xl:
+                                    added_cond_kwargs["text_embeds"] = conditional_embeds.pooled_embeds
+                                    added_cond_kwargs['time_ids'] = self.sd.get_time_ids_from_latents(noisy_latents)
+
                                 controlnet_output = self.network(
                                     sample=noisy_latents,
                                     timestep=timesteps,
                                     encoder_hidden_states=conditional_embeds.text_embeds,
                                     controlnet_cond=adapter_images,
                                     conditioning_scale=1.0,
+                                    added_cond_kwargs=added_cond_kwargs if self.sd.is_xl else None,
                                 )
                                 if controlnet_output is not None:
                                     pred_kwargs['down_block_additional_residuals'] = controlnet_output['down_block_res_samples']
