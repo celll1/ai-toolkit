@@ -1466,14 +1466,14 @@ class SDTrainer(BaseSDTrainProcess):
                             # This avoids redundant text encoding computations
                             multi_factor = batch.multi_noise_factor
                             original_batch_size = conditional_embeds.text_embeds.shape[0]
-                            
+
                             # Expand conditional embeddings
                             expanded_embeds_list = []
                             for i in range(original_batch_size):
                                 single_embed = conditional_embeds.text_embeds[i:i+1]
                                 expanded_embeds_list.append(single_embed.repeat(multi_factor, 1, 1))
                             conditional_embeds.text_embeds = torch.cat(expanded_embeds_list, dim=0)
-                            
+
                             # Also expand pooled_embeds if they exist
                             if hasattr(conditional_embeds, 'pooled_embeds') and conditional_embeds.pooled_embeds is not None:
                                 expanded_pooled_list = []
@@ -1481,7 +1481,7 @@ class SDTrainer(BaseSDTrainProcess):
                                     single_pooled = conditional_embeds.pooled_embeds[i:i+1]
                                     expanded_pooled_list.append(single_pooled.repeat(multi_factor, 1))
                                 conditional_embeds.pooled_embeds = torch.cat(expanded_pooled_list, dim=0)
-                            
+
                             # Expand unconditional embeddings if doing CFG
                             if self.train_config.do_cfg and unconditional_embeds is not None:
                                 expanded_uncond_list = []
@@ -1489,13 +1489,21 @@ class SDTrainer(BaseSDTrainProcess):
                                     single_uncond = unconditional_embeds.text_embeds[i:i+1]
                                     expanded_uncond_list.append(single_uncond.repeat(multi_factor, 1, 1))
                                 unconditional_embeds.text_embeds = torch.cat(expanded_uncond_list, dim=0)
-                                
+
                                 if hasattr(unconditional_embeds, 'pooled_embeds') and unconditional_embeds.pooled_embeds is not None:
                                     expanded_pooled_uncond_list = []
                                     for i in range(original_batch_size):
                                         single_pooled_uncond = unconditional_embeds.pooled_embeds[i:i+1]
                                         expanded_pooled_uncond_list.append(single_pooled_uncond.repeat(multi_factor, 1))
                                     unconditional_embeds.pooled_embeds = torch.cat(expanded_pooled_uncond_list, dim=0)
+
+                            # Expand adapter images (control images) if present
+                            if has_adapter_img and adapter_images is not None:
+                                expanded_adapter_list = []
+                                for i in range(original_batch_size):
+                                    single_adapter = adapter_images[i:i+1]
+                                    expanded_adapter_list.append(single_adapter.repeat(multi_factor, 1, 1, 1))
+                                adapter_images = torch.cat(expanded_adapter_list, dim=0)
                     
                     if self.decorator:
                         conditional_embeds.text_embeds = self.decorator(
