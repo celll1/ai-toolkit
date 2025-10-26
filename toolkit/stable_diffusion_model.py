@@ -1444,6 +1444,11 @@ class StableDiffusion:
                             # Encode to latents
                             ctrl_latents = self.encode_images(ctrl_tensor)
 
+                            # DEBUG: Print latent statistics after encoding
+                            print(f"[DEBUG img2img] ctrl_latents stats after VAE encode:")
+                            print(f"  mean={ctrl_latents.mean().item():.4f}, std={ctrl_latents.std().item():.4f}")
+                            print(f"  min={ctrl_latents.min().item():.4f}, max={ctrl_latents.max().item():.4f}")
+
                             # For img2img: add noise and prepare custom timesteps
                             # denoising_strength: 1.0 = full denoise (max noise), 0.0 = no denoise (no noise)
 

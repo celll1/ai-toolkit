@@ -1366,6 +1366,12 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     # Model learns to denoise from A to B
                     control_imgs = batch.control_tensor.to(self.device_torch, dtype=dtype)
                     control_latents = self.sd.encode_images(control_imgs)
+
+                    # DEBUG: Print latent_multiplier value (only once per training session)
+                    if not hasattr(self, '_latent_multiplier_logged'):
+                        print(f"[DEBUG Training] latent_multiplier={latent_multiplier}")
+                        self._latent_multiplier_logged = True
+
                     control_latents = control_latents * latent_multiplier
                     # Add noise to control latents instead of target latents
                     noisy_latents = self.sd.add_noise(control_latents, noise, timesteps)
