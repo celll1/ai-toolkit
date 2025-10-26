@@ -123,10 +123,13 @@ class SDTrainer(BaseSDTrainProcess):
                 sample_item = self.sample_config.samples[i]
                 prompt = self.sample_config.prompts[i]
 
+                # Use individual negative prompt if specified, otherwise use default
+                negative_prompt = sample_item.neg if sample_item.neg else self.sample_config.neg
+
                 # needed so we can autoparse the prompt to handle flags
                 gen_img_config = GenerateImageConfig(
                     prompt=prompt, # it will autoparse the prompt
-                    negative_prompt=sample_item.neg,
+                    negative_prompt=negative_prompt,
                     output_path=output_path,
                 )
                 positive = self.sd.encode_prompt(gen_img_config.prompt).to('cpu')

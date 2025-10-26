@@ -1823,6 +1823,18 @@ export default function SimpleJob({
                 </FormGroup>
               </div>
             </div>
+            <div className="pt-4">
+              <label className="block text-xs mb-1 mt-2 text-gray-300">
+                Default Negative Prompt (Optional)
+              </label>
+              <textarea
+                value={jobConfig.config.process[0].sample.neg || ''}
+                onChange={e => setJobConfig(e.target.value, 'config.process[0].sample.neg')}
+                placeholder="Enter default negative prompt (used when individual prompts don't specify one)"
+                className="w-full text-sm px-3 py-2 bg-gray-800 border border-gray-700 rounded-sm focus:ring-2 focus:ring-gray-600 focus:border-transparent"
+                rows={2}
+              />
+            </div>
             <FormGroup label={`Sample Prompts (${jobConfig.config.process[0].sample.samples.length})`} className="pt-2">
               <div></div>
             </FormGroup>
@@ -1865,6 +1877,18 @@ export default function SimpleJob({
                             )}
                           </div>
                         )}
+                    </div>
+                    <div className="pt-2">
+                      <label className="block text-xs mb-1 text-gray-300">
+                        Negative Prompt (Optional - leave empty to use default)
+                      </label>
+                      <textarea
+                        value={sample.neg || ''}
+                        onChange={e => setJobConfig(e.target.value, `config.process[0].sample.samples[${i}].neg`)}
+                        placeholder="Leave empty to use default negative prompt"
+                        className="w-full text-sm px-3 py-2 bg-gray-800 border border-gray-700 rounded-sm focus:ring-2 focus:ring-gray-600 focus:border-transparent"
+                        rows={2}
+                      />
                     </div>
                     <div className="pb-4"></div>
                   </div>
