@@ -1502,6 +1502,20 @@ class StableDiffusion:
                             # Higher timestep = more noise
                             ctrl_latents = noise_scheduler.add_noise(ctrl_latents, noise, init_noise_timestep)
 
+                            # DEBUG: Print latent statistics
+                            print(f"[DEBUG img2img] ctrl_latents stats after add_noise:")
+                            print(f"  mean={ctrl_latents.mean().item():.4f}, std={ctrl_latents.std().item():.4f}")
+                            print(f"  min={ctrl_latents.min().item():.4f}, max={ctrl_latents.max().item():.4f}")
+                            print(f"  scheduler.init_noise_sigma={noise_scheduler.init_noise_sigma}")
+
+                            # IMPORTANT: Pipeline's prepare_latents() will multiply by init_noise_sigma
+                            # We need to pre-divide to cancel out that multiplication
+                            # This ensures the latents maintain correct scale for img2img
+                            ctrl_latents = ctrl_latents / noise_scheduler.init_noise_sigma
+
+                            print(f"[DEBUG img2img] ctrl_latents stats after init_noise_sigma correction:")
+                            print(f"  mean={ctrl_latents.mean().item():.4f}, std={ctrl_latents.std().item():.4f}")
+
                             # Set as initial latents for generation
                             gen_config.latents = ctrl_latents
                             # Store custom timesteps to use in pipeline call (must be on CPU for numpy conversion)
