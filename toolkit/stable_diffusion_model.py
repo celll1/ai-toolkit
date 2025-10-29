@@ -1704,6 +1704,12 @@ class StableDiffusion:
                             scheduler = pipe.scheduler
                             alpha_prod_t = scheduler.alphas_cumprod[timestep]
 
+                            # DEBUG: Print latents statistics at first and last step
+                            if step_index == 0 or step_index == len(gen_config.custom_timesteps) - 1:
+                                latents = callback_kwargs.get('latents')
+                                if latents is not None:
+                                    print(f"[Denoising] step={step_index}, latents mean={latents.mean().item():.4f}, std={latents.std().item():.4f}")
+
                             print(f"[Denoising] step={step_index}/{len(gen_config.custom_timesteps)-1}, "
                                   f"timestep={timestep}, alpha_t={alpha_prod_t:.4f}")
                             pbar.update(1)
