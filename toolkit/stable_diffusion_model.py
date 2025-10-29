@@ -1536,10 +1536,18 @@ class StableDiffusion:
                             print(f"[DEBUG img2img] ctrl_latents stats after init_noise_sigma correction:")
                             print(f"  mean={ctrl_latents.mean().item():.4f}, std={ctrl_latents.std().item():.4f}")
 
-                            # Set as initial latents for generation
-                            gen_config.latents = ctrl_latents
-                            # Store custom timesteps to use in pipeline call (must be on CPU for numpy conversion)
-                            gen_config.custom_timesteps = timesteps.cpu()
+                            # EXPERIMENTAL: For denoising_strength=1.0, skip passing latents (use pure txt2img)
+                            # This tests if passing latents is causing the washed-out issue
+                            if gen_config.denoising_strength >= 0.99:
+                                print(f"[DEBUG img2img] denoising_strength={gen_config.denoising_strength}, using txt2img mode (no latents)")
+                                # Don't set latents, let pipeline generate random ones
+                                # Still use custom timesteps for consistency
+                                gen_config.custom_timesteps = timesteps.cpu()
+                            else:
+                                # Set as initial latents for generation
+                                gen_config.latents = ctrl_latents
+                                # Store custom timesteps to use in pipeline call (must be on CPU for numpy conversion)
+                                gen_config.custom_timesteps = timesteps.cpu()
                     elif network is not None:
                         from toolkit.models.controlnet_train import ControlNetNetwork, ControlNetLLLiteNetwork
                         if isinstance(network, ControlNetLLLiteNetwork):
