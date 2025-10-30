@@ -1164,7 +1164,12 @@ class StableDiffusion:
         configs_with_ctrl = []
         configs_without_ctrl = []
 
-        for cfg in image_configs:
+        # Store original index and total count in each config for correct logging
+        original_total = len(image_configs)
+        for idx, cfg in enumerate(image_configs):
+            if not hasattr(cfg, '_original_index'):
+                cfg._original_index = idx
+                cfg._original_total = original_total
             if cfg.ctrl_img is not None and not is_controlnet:
                 configs_with_ctrl.append(cfg)
             else:
@@ -1884,9 +1889,12 @@ class StableDiffusion:
                             generator=generator,
                         ).images[0]
 
-                    gen_config.save_image(img, i)
-                    gen_config.log_image(img, i)
-                    self._after_sample_image(i, len(image_configs))
+                    # Use original index and total if available (for recursive calls with separated samples)
+                    original_idx = gen_config._original_index if hasattr(gen_config, '_original_index') else i
+                    original_total = gen_config._original_total if hasattr(gen_config, '_original_total') else len(image_configs)
+                    gen_config.save_image(img, original_idx)
+                    gen_config.log_image(img, original_idx)
+                    self._after_sample_image(original_idx, original_total)
                     flush()
 
                 if self.adapter is not None and isinstance(self.adapter, ReferenceAdapter):
