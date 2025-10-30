@@ -1470,11 +1470,10 @@ class StableDiffusion:
                             gen_config.width = ctrl_width
                             gen_config.height = ctrl_height
 
-                            # For img2img pipeline: pass the image and strength directly
-                            # The pipeline will handle encoding, noise addition, and timestep calculation
-                            print(f"[DEBUG img2img] Using img2img pipeline with strength={gen_config.denoising_strength}")
-                            extra['image'] = ctrl_image  # PIL Image for img2img pipeline
-                            extra['strength'] = gen_config.denoising_strength
+                            # Store ctrl_image to be added to extra later
+                            # (after adapter processing, which may overwrite 'image' key)
+                            gen_config.img2img_image = ctrl_image
+                            gen_config.img2img_strength = gen_config.denoising_strength
                     elif network is not None:
                         from toolkit.models.controlnet_train import ControlNetNetwork, ControlNetLLLiteNetwork
                         if isinstance(network, ControlNetLLLiteNetwork):
@@ -1651,6 +1650,13 @@ class StableDiffusion:
                             return callback_kwargs
 
                         extra['callback_on_step_end'] = denoising_callback
+
+                    # Add img2img parameters after adapter processing
+                    # (adapter may have overwritten 'image' key, so we do this last)
+                    if hasattr(gen_config, 'img2img_image') and gen_config.img2img_image is not None:
+                        print(f"[DEBUG img2img] Using img2img pipeline with strength={gen_config.img2img_strength}")
+                        extra['image'] = gen_config.img2img_image  # PIL Image for img2img pipeline
+                        extra['strength'] = gen_config.img2img_strength
 
                     conditional_embeds = conditional_embeds.to(self.device_torch, dtype=self.unet.dtype)
                     unconditional_embeds = unconditional_embeds.to(self.device_torch, dtype=self.unet.dtype)
