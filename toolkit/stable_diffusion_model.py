@@ -1221,11 +1221,29 @@ class StableDiffusion:
                 except:
                     pass
 
+            # Check if any image config has ctrl_img for img2img
+            # We need to determine pipeline type before initialization
+            has_ctrl_img_for_img2img = False
+            for cfg in image_configs:
+                if cfg.ctrl_img is not None:
+                    # Check if this is for ControlNet or regular img2img
+                    # We'll do a simple check: if network is ControlNet, it's not img2img
+                    from toolkit.models.controlnet_train import ControlNetNetwork, ControlNetLLLiteNetwork
+                    is_controlnet = network is not None and isinstance(network, (ControlNetNetwork, ControlNetLLLiteNetwork))
+                    if not is_controlnet:
+                        has_ctrl_img_for_img2img = True
+                        break
+
             if sampler.startswith("sample_") and self.is_xl:
                 # using kdiffusion
                 Pipe = StableDiffusionKDiffusionXLPipeline
             elif self.is_xl:
-                Pipe = StableDiffusionXLPipeline
+                # Use img2img pipeline if we have control images (not for ControlNet)
+                if has_ctrl_img_for_img2img:
+                    Pipe = StableDiffusionXLImg2ImgPipeline
+                    print("[INFO] Using StableDiffusionXLImg2ImgPipeline for control image samples")
+                else:
+                    Pipe = StableDiffusionXLPipeline
             elif self.is_v3:
                 Pipe = StableDiffusion3Pipeline
             else:
@@ -1439,13 +1457,11 @@ class StableDiffusion:
                                 extra['image'] = ctrl_image  # PIL Image for ControlNet pipeline
                                 extra['controlnet_conditioning_scale'] = gen_config.controlnet_conditioning_scale
                         else:
-                            # LoRA/LoKR/full finetune: Use control image as starting latents (Image-to-Image)
+                            # LoRA/LoKR/full finetune: Use img2img pipeline with control image
                             ctrl_image = Image.open(gen_config.ctrl_img).convert("RGB")
 
                             # Use control image size (adjusted to multiples of 8) instead of config size
-                            # This ensures latent size compatibility
                             orig_width, orig_height = ctrl_image.size
-                            # Round to nearest multiple of 8 (required for latent encoding)
                             ctrl_width = (orig_width // 8) * 8
                             ctrl_height = (orig_height // 8) * 8
                             ctrl_image = ctrl_image.resize((ctrl_width, ctrl_height))
@@ -1454,108 +1470,11 @@ class StableDiffusion:
                             gen_config.width = ctrl_width
                             gen_config.height = ctrl_height
 
-                            ctrl_tensor = transforms.ToTensor()(ctrl_image)
-                            ctrl_tensor = ctrl_tensor.unsqueeze(0).to(self.device_torch, dtype=self.torch_dtype)
-                            # Encode to latents
-                            ctrl_latents = self.encode_images(ctrl_tensor)
-
-                            # DEBUG: Print latent statistics after encoding
-                            print(f"[DEBUG img2img] ctrl_latents stats after VAE encode:")
-                            print(f"  mean={ctrl_latents.mean().item():.4f}, std={ctrl_latents.std().item():.4f}")
-                            print(f"  min={ctrl_latents.min().item():.4f}, max={ctrl_latents.max().item():.4f}")
-
-                            # For img2img: add noise and prepare custom timesteps
-                            # denoising_strength: 1.0 = full denoise (max noise), 0.0 = no denoise (no noise)
-
-                            # Get noise scheduler
-                            noise_scheduler = self.noise_scheduler
-
-                            # IMPORTANT: Set the correct number of timesteps first
-                            # This must be done before accessing noise_scheduler.timesteps
-                            num_inference_steps = gen_config.num_inference_steps
-                            noise_scheduler.set_timesteps(num_inference_steps, device=self.device_torch)
-
-                            # Calculate timestep index based on strength
-                            # img2img logic: strength determines how much noise to add
-                            # strength 1.0 = add full noise (start from first timestep, index 0)
-                            # strength 0.5 = add medium noise (start from middle)
-                            # strength 0.0 = add no noise (start from last timestep, skip denoising)
-
-                            # The scheduler timesteps go from high to low (e.g., [999, 979, ..., 19, 0] for 25 steps)
-                            # We want to start denoising from a certain point based on strength
-                            # Calculate which timestep to start from
-                            # strength=1.0: t_start=0 (start from beginning, full noise)
-                            # strength=0.5: t_start=12 (start from middle, medium noise)
-                            # strength=0.0: t_start=24 (start from end, minimal noise)
-                            t_start = int(num_inference_steps * (1.0 - gen_config.denoising_strength))
-                            t_start = min(t_start, num_inference_steps - 1)
-
-                            # Get timesteps for denoising (from t_start to end)
-                            timesteps = noise_scheduler.timesteps[t_start:]
-
-                            # DEBUG: Print timestep information
-                            print(f"[DEBUG img2img] denoising_strength={gen_config.denoising_strength}")
-                            print(f"[DEBUG img2img] num_inference_steps={num_inference_steps}")
-                            print(f"[DEBUG img2img] t_start={t_start}")
-                            print(f"[DEBUG img2img] Total timesteps in scheduler: {len(noise_scheduler.timesteps)}")
-                            print(f"[DEBUG img2img] Full timesteps: {noise_scheduler.timesteps}")
-                            print(f"[DEBUG img2img] Selected timesteps: {timesteps}")
-                            print(f"[DEBUG img2img] Will add noise at timestep: {timesteps[0]}")
-
-                            # The noise level should match the FIRST timestep we'll denoise from
-                            # This is timesteps[0], which is the starting point
-                            init_noise_timestep = timesteps[0:1]
-
-                            # Set seed for reproducible noise
-                            torch.manual_seed(gen_config.seed)
-                            torch.cuda.manual_seed(gen_config.seed)
-
-                            # Generate random noise
-                            noise = torch.randn(
-                                ctrl_latents.shape,
-                                device=ctrl_latents.device,
-                                dtype=ctrl_latents.dtype
-                            )
-
-                            # Add noise to control latents matching the initial timestep
-                            # For DDPM scheduler: timesteps go from high (999) to low (0)
-                            # Higher timestep = more noise
-                            ctrl_latents = noise_scheduler.add_noise(ctrl_latents, noise, init_noise_timestep)
-
-                            # DEBUG: Print latent statistics
-                            print(f"[DEBUG img2img] ctrl_latents stats after add_noise:")
-                            print(f"  mean={ctrl_latents.mean().item():.4f}, std={ctrl_latents.std().item():.4f}")
-                            print(f"  min={ctrl_latents.min().item():.4f}, max={ctrl_latents.max().item():.4f}")
-                            print(f"  scheduler.init_noise_sigma={noise_scheduler.init_noise_sigma}")
-
-                            # IMPORTANT: Pipeline's prepare_latents() will multiply by init_noise_sigma
-                            # We need to pre-divide to cancel out that multiplication
-                            # This ensures the latents maintain correct scale for img2img
-                            ctrl_latents = ctrl_latents / noise_scheduler.init_noise_sigma
-
-                            print(f"[DEBUG img2img] ctrl_latents stats after init_noise_sigma correction:")
-                            print(f"  mean={ctrl_latents.mean().item():.4f}, std={ctrl_latents.std().item():.4f}")
-
-                            # LIMITATION: Diffusers txt2img pipeline cannot correctly handle img2img
-                            # functionality with custom latents and timesteps.
-                            #
-                            # Root cause: When both latents and timesteps are provided:
-                            # 1. We call set_timesteps() to get timestep values
-                            # 2. We add noise using add_noise() at the correct timestep
-                            # 3. Pipeline calls set_timesteps() again with custom timesteps
-                            # 4. This causes scheduler state inconsistency
-                            #
-                            # Proper solution requires either:
-                            # A) Switch to StableDiffusionXLImg2ImgPipeline for control image samples
-                            # B) Implement custom denoising loop using predict_noise()
-                            #
-                            # Current workaround: Don't pass latents, use txt2img mode
-                            # Control image is used ONLY for determining output resolution
-                            # denoising_strength parameter is ignored
-                            print(f"[DEBUG img2img] WARNING: Using txt2img mode - control image sets resolution only")
-                            print(f"[DEBUG img2img] denoising_strength={gen_config.denoising_strength} is ignored")
-                            # Don't set gen_config.latents or gen_config.custom_timesteps
-                            # This avoids the washed-out image issue but loses true img2img functionality
+                            # For img2img pipeline: pass the image and strength directly
+                            # The pipeline will handle encoding, noise addition, and timestep calculation
+                            print(f"[DEBUG img2img] Using img2img pipeline with strength={gen_config.denoising_strength}")
+                            extra['image'] = ctrl_image  # PIL Image for img2img pipeline
+                            extra['strength'] = gen_config.denoising_strength
                     elif network is not None:
                         from toolkit.models.controlnet_train import ControlNetNetwork, ControlNetLLLiteNetwork
                         if isinstance(network, ControlNetLLLiteNetwork):
@@ -1752,24 +1671,32 @@ class StableDiffusion:
                                 **gen_config.extra_kwargs,
                             }
 
-                        img = pipeline(
-                            # prompt=gen_config.prompt,
-                            # prompt_2=gen_config.prompt_2,
-                            prompt_embeds=conditional_embeds.text_embeds,
-                            pooled_prompt_embeds=conditional_embeds.pooled_embeds,
-                            negative_prompt_embeds=unconditional_embeds.text_embeds,
-                            negative_pooled_prompt_embeds=unconditional_embeds.pooled_embeds,
-                            # negative_prompt=gen_config.negative_prompt,
-                            # negative_prompt_2=gen_config.negative_prompt_2,
-                            height=gen_config.height,
-                            width=gen_config.width,
-                            num_inference_steps=gen_config.num_inference_steps,
-                            guidance_scale=gen_config.guidance_scale,
-                            guidance_rescale=grs,
-                            latents=gen_config.latents,
-                            generator=generator,
-                            **extra
-                        ).images[0]
+                        # Check if this is img2img pipeline (has 'image' and 'strength' in extra)
+                        is_img2img = 'image' in extra and 'strength' in extra
+
+                        # Build pipeline call arguments
+                        pipeline_args = {
+                            'prompt_embeds': conditional_embeds.text_embeds,
+                            'pooled_prompt_embeds': conditional_embeds.pooled_embeds,
+                            'negative_prompt_embeds': unconditional_embeds.text_embeds,
+                            'negative_pooled_prompt_embeds': unconditional_embeds.pooled_embeds,
+                            'num_inference_steps': gen_config.num_inference_steps,
+                            'guidance_scale': gen_config.guidance_scale,
+                            'generator': generator,
+                        }
+
+                        # Img2img pipeline doesn't use width/height/latents (determined from image)
+                        # Txt2img pipeline requires width/height and optional latents
+                        if not is_img2img:
+                            pipeline_args['height'] = gen_config.height
+                            pipeline_args['width'] = gen_config.width
+                            pipeline_args['latents'] = gen_config.latents
+                            pipeline_args['guidance_rescale'] = grs
+
+                        # Merge extra args
+                        pipeline_args.update(extra)
+
+                        img = pipeline(**pipeline_args).images[0]
                     elif self.is_v3:
                         img = pipeline(
                             prompt_embeds=conditional_embeds.text_embeds,
