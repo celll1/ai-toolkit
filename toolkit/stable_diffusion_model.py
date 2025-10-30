@@ -1153,6 +1153,32 @@ class StableDiffusion:
             sampler=None,
             pipeline: Union[None, StableDiffusionPipeline, StableDiffusionXLPipeline] = None,
     ):
+        # Separate configs by ctrl_img presence (img2img vs txt2img)
+        # img2img pipeline requires 'image' parameter for all samples
+        # txt2img pipeline doesn't accept 'image' parameter
+        # They cannot be mixed in one batch
+        from toolkit.models.controlnet_train import ControlNetNetwork, ControlNetLLLiteNetwork
+        network_obj = unwrap_model(self.network)
+        is_controlnet = network_obj is not None and isinstance(network_obj, (ControlNetNetwork, ControlNetLLLiteNetwork))
+
+        configs_with_ctrl = []
+        configs_without_ctrl = []
+
+        for cfg in image_configs:
+            if cfg.ctrl_img is not None and not is_controlnet:
+                configs_with_ctrl.append(cfg)
+            else:
+                configs_without_ctrl.append(cfg)
+
+        # If we have mixed samples, process them separately
+        if len(configs_with_ctrl) > 0 and len(configs_without_ctrl) > 0:
+            print(f"[INFO] Processing {len(configs_without_ctrl)} txt2img samples and {len(configs_with_ctrl)} img2img samples separately")
+            # Process txt2img samples first
+            self.generate_images(configs_without_ctrl, sampler, pipeline)
+            # Then process img2img samples
+            self.generate_images(configs_with_ctrl, sampler, pipeline)
+            return
+
         network = unwrap_model(self.network)
         merge_multiplier = 1.0
         flush()
