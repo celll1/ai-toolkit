@@ -1536,18 +1536,26 @@ class StableDiffusion:
                             print(f"[DEBUG img2img] ctrl_latents stats after init_noise_sigma correction:")
                             print(f"  mean={ctrl_latents.mean().item():.4f}, std={ctrl_latents.std().item():.4f}")
 
-                            # EXPERIMENTAL: For denoising_strength=1.0, skip passing latents (use pure txt2img)
-                            # This tests if passing latents is causing the washed-out issue
-                            if gen_config.denoising_strength >= 0.99:
-                                print(f"[DEBUG img2img] denoising_strength={gen_config.denoising_strength}, using txt2img mode (no latents)")
-                                # Don't set latents, let pipeline generate random ones
-                                # Still use custom timesteps for consistency
-                                gen_config.custom_timesteps = timesteps.cpu()
-                            else:
-                                # Set as initial latents for generation
-                                gen_config.latents = ctrl_latents
-                                # Store custom timesteps to use in pipeline call (must be on CPU for numpy conversion)
-                                gen_config.custom_timesteps = timesteps.cpu()
+                            # LIMITATION: Diffusers txt2img pipeline cannot correctly handle img2img
+                            # functionality with custom latents and timesteps.
+                            #
+                            # Root cause: When both latents and timesteps are provided:
+                            # 1. We call set_timesteps() to get timestep values
+                            # 2. We add noise using add_noise() at the correct timestep
+                            # 3. Pipeline calls set_timesteps() again with custom timesteps
+                            # 4. This causes scheduler state inconsistency
+                            #
+                            # Proper solution requires either:
+                            # A) Switch to StableDiffusionXLImg2ImgPipeline for control image samples
+                            # B) Implement custom denoising loop using predict_noise()
+                            #
+                            # Current workaround: Don't pass latents, use txt2img mode
+                            # Control image is used ONLY for determining output resolution
+                            # denoising_strength parameter is ignored
+                            print(f"[DEBUG img2img] WARNING: Using txt2img mode - control image sets resolution only")
+                            print(f"[DEBUG img2img] denoising_strength={gen_config.denoising_strength} is ignored")
+                            # Don't set gen_config.latents or gen_config.custom_timesteps
+                            # This avoids the washed-out image issue but loses true img2img functionality
                     elif network is not None:
                         from toolkit.models.controlnet_train import ControlNetNetwork, ControlNetLLLiteNetwork
                         if isinstance(network, ControlNetLLLiteNetwork):
