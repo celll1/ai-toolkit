@@ -1653,10 +1653,15 @@ class StableDiffusion:
 
                     # Add img2img parameters after adapter processing
                     # (adapter may have overwritten 'image' key, so we do this last)
+                    print(f"[DEBUG] Checking img2img params: hasattr={hasattr(gen_config, 'img2img_image')}, "
+                          f"ctrl_img={gen_config.ctrl_img}, extra.keys={list(extra.keys())}")
                     if hasattr(gen_config, 'img2img_image') and gen_config.img2img_image is not None:
                         print(f"[DEBUG img2img] Using img2img pipeline with strength={gen_config.img2img_strength}")
+                        print(f"[DEBUG img2img] Image type: {type(gen_config.img2img_image)}")
                         extra['image'] = gen_config.img2img_image  # PIL Image for img2img pipeline
                         extra['strength'] = gen_config.img2img_strength
+                    else:
+                        print(f"[DEBUG] img2img_image not found or None")
 
                     conditional_embeds = conditional_embeds.to(self.device_torch, dtype=self.unet.dtype)
                     unconditional_embeds = unconditional_embeds.to(self.device_torch, dtype=self.unet.dtype)
